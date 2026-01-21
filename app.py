@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import json
 
-# 1. CONFIGURAÇÃO (Obrigatório ser a primeira linha)
+# 1. CONFIGURAÇÃO
 st.set_page_config(page_title="NutriVendas 2.5", page_icon="⚡", layout="wide")
 
 # 2. ESTILO
@@ -25,12 +25,10 @@ if "ACCESS_PASSWORD" not in st.secrets:
     st.error("⚠️ Falta ACCESS_PASSWORD")
     st.stop()
 
-# 4. FUNÇÃO DE CONEXÃO (MODELO 2.5 FLASH)
+# 4. FUNÇÃO (Gemini 2.5 Flash)
 def gerar_conteudo(nicho, tipo, preco, objetivo):
     api_key = st.secrets["GOOGLE_API_KEY"]
-    # AQUI ESTÁ O SEGREDO: Usando o modelo que apareceu no seu Raio-X
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    
     headers = {"Content-Type": "application/json"}
     
     prompt = f"""
@@ -57,22 +55,21 @@ def gerar_conteudo(nicho, tipo, preco, objetivo):
         
         if response.status_code == 200:
             dados = response.json()
-            # Navega com segurança na resposta do Google
             if "candidates" in dados and len(dados["candidates"]) > 0:
                 parts = dados["candidates"][0]["content"]["parts"]
                 if len(parts) > 0:
                     return parts[0]["text"]
-            return "⚠️ A IA respondeu vazio."
+            return "CRITICAL_ERROR: A IA respondeu vazio."
         else:
-            return f"Erro Google (Status {response.status_code}): {response.text}"
+            return f"CRITICAL_ERROR: Google Status {response.status_code} - {response.text}"
             
     except Exception as e:
-        return f"Erro Conexão: {str(e)}"
+        return f"CRITICAL_ERROR: Conexão {str(e)}"
 
 def separar_texto(text):
     c, v, b = text, "", ""
-    # Se der erro no Google, não tenta separar
-    if "Erro" in text:
+    # Limpeza básica
+    if "CRITICAL_ERROR" in text:
         return text, "", ""
         
     if "[CONTEUDO]" in text:
@@ -101,12 +98,12 @@ if not st.session_state.auth:
     st.stop()
 
 # 6. APP PRINCIPAL
-st.title("⚡ NutriVendas: Versão 2.5")
+st.title("⚡ NutriVendas Oficial")
 
 c1, c2 = st.columns([1, 2])
 with c1:
     with st.form("form"):
-        nicho = st.text_input("Nicho", "Emagrecimento")
+        nicho = st.text_input("Nicho", "Hipertrofia")
         tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
         preco = st.text_input("Preço", "R$ 200")
         obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
@@ -114,16 +111,16 @@ with c1:
 
 with c2:
     if btn:
-        with st.spinner("🤖 Consultando Gemini 2.5..."):
+        with st.spinner("🤖 Criando posts e scripts..."):
             res = gerar_conteudo(nicho, tipo, preco, obj)
             
-            # Se a resposta for curta demais ou erro, mostra direto
-            if "Erro" in res or len(res) < 50:
+            # AGORA SÓ TRAVA SE FOR ERRO CRÍTICO
+            if res.startswith("CRITICAL_ERROR"):
                 st.error(res)
             else:
                 c, v, b = separar_texto(res)
                 
-                t1, t2, t3 = st.tabs(["Conteúdo", "Vendas", "Bio"])
+                t1, t2, t3 = st.tabs(["📲 Conteúdo", "💰 Scripts", "🔗 Bio"])
                 t1.markdown(c)
                 t2.markdown(v)
                 t3.markdown(b)
