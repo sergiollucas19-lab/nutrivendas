@@ -3,7 +3,7 @@ import requests
 import json
 
 # 1. Configuração
-st.set_page_config(page_title="NutriVendas 2.0", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="NutriVendas Flex", page_icon="🎛️", layout="wide")
 
 # 2. CSS
 st.markdown("""
@@ -14,13 +14,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Função IA (Agora usando GEMINI 2.0 FLASH)
-def chamar_ia(nicho, tipo, preco, objetivo):
+# 3. Menu Lateral de Configuração
+with st.sidebar:
+    st.header("⚙️ Configurações")
+    # AQUI ESTÁ A MÁGICA: Você escolhe o motor
+    modelo_escolhido = st.selectbox(
+        "Escolha o Motor da IA:",
+        ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"],
+        index=0  # Começa com o 1.5 que é mais garantido
+    )
+    st.info(f"Usando: {modelo_escolhido}")
+
+# 4. Função IA (Dinâmica)
+def chamar_ia(nicho, tipo, preco, objetivo, modelo):
     if "GOOGLE_API_KEY" not in st.secrets: return "ERRO: Falta configurar GOOGLE_API_KEY"
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # MUDANÇA AQUI: Trocamos 2.5 por 2.0 para fugir do limite
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    # URL muda de acordo com sua escolha no menu
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
     
     prompt = f"""
     Crie conteúdo de marketing para nutricionista.
@@ -47,13 +58,13 @@ def chamar_ia(nicho, tipo, preco, objetivo):
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text']
         elif response.status_code == 429:
-            return "⚠️ Limite diário atingido! Tente novamente amanhã ou crie uma nova chave API no Google."
+            return "QUOTA_EXCEEDED"
         else:
-            return f"ERRO GOOGLE: {response.text}"
+            return f"ERRO GOOGLE ({response.status_code}): {response.text}"
     except Exception as e:
         return f"ERRO CONEXÃO: {e}"
 
-# 4. Login
+# 5. Login
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
@@ -67,8 +78,8 @@ if not st.session_state.auth:
             st.error("Senha Incorreta")
     st.stop()
 
-# 5. Interface
-st.title("🚀 NutriVendas: Versão 2.0")
+# 6. Interface Principal
+st.title(f"🚀 NutriVendas: {modelo_escolhido}")
 
 col1, col2 = st.columns([1, 2])
 
@@ -82,21 +93,27 @@ with col1:
 
 with col2:
     if btn:
-        with st.spinner("🤖 A IA está escrevendo (Motor 2.0)..."):
-            texto = chamar_ia(nicho, tipo, preco, obj)
+        with st.spinner(f"🤖 A IA está escrevendo usando {modelo_escolhido}..."):
+            texto = chamar_ia(nicho, tipo, preco, obj, modelo_escolhido)
             
-            p1, p2, p3 = texto, "...", "..."
-            
-            if "[PARTE1]" in texto:
-                partes = texto.split("[PARTE2]")
-                p1 = partes[0].replace("[PARTE1]", "").strip()
-                if len(partes) > 1:
-                    resto = partes[1].split("[PARTE3]")
-                    p2 = resto[0].strip()
-                    if len(resto) > 1:
-                        p3 = resto[1].strip()
-            
-            aba1, aba2, aba3 = st.tabs(["📝 Posts", "💬 Scripts", "🔗 Bio"])
-            aba1.markdown(p1)
-            aba2.markdown(p2)
-            aba3.markdown(p3)
+            if texto == "QUOTA_EXCEEDED":
+                st.error(f"⚠️ Limite atingido para o {modelo_escolhido}!")
+                st.warning("👈 Tente mudar o modelo no menu lateral (ex: de 2.0 para 1.5) e clique em Gerar de novo.")
+            elif "ERRO" in texto:
+                st.error(texto)
+            else:
+                p1, p2, p3 = texto, "...", "..."
+                
+                if "[PARTE1]" in texto:
+                    partes = texto.split("[PARTE2]")
+                    p1 = partes[0].replace("[PARTE1]", "").strip()
+                    if len(partes) > 1:
+                        resto = partes[1].split("[PARTE3]")
+                        p2 = resto[0].strip()
+                        if len(resto) > 1:
+                            p3 = resto[1].strip()
+                
+                aba1, aba2, aba3 = st.tabs(["📝 Posts", "💬 Scripts", "🔗 Bio"])
+                aba1.markdown(p1)
+                aba2.markdown(p2)
+                aba3.markdown(p3)
