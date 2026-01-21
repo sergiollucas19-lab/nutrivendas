@@ -3,9 +3,9 @@ import requests
 import json
 
 # 1. Configuração
-st.set_page_config(page_title="NutriVendas VIP", page_icon="💎", layout="wide")
+st.set_page_config(page_title="NutriVendas 2.0", page_icon="🚀", layout="wide")
 
-# 2. CSS Básico
+# 2. CSS
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: white; }
@@ -14,16 +14,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Função IA (Sem verificações complicadas)
+# 3. Função IA (Agora usando GEMINI 2.0 FLASH)
 def chamar_ia(nicho, tipo, preco, objetivo):
-    # Pega a chave
     if "GOOGLE_API_KEY" not in st.secrets: return "ERRO: Falta configurar GOOGLE_API_KEY"
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # URL do Gemini 2.5
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    # MUDANÇA AQUI: Trocamos 2.5 por 2.0 para fugir do limite
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     
-    # Prompt
     prompt = f"""
     Crie conteúdo de marketing para nutricionista.
     Nicho: {nicho}. Tipo: {tipo}. Valor: {preco}. Meta: {objetivo}.
@@ -45,18 +43,21 @@ def chamar_ia(nicho, tipo, preco, objetivo):
     
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text']
+        elif response.status_code == 429:
+            return "⚠️ Limite diário atingido! Tente novamente amanhã ou crie uma nova chave API no Google."
         else:
             return f"ERRO GOOGLE: {response.text}"
     except Exception as e:
         return f"ERRO CONEXÃO: {e}"
 
-# 4. Login Simples
+# 4. Login
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 Acesso Restrito")
+    st.title("🔒 NutriVendas")
     senha = st.text_input("Senha", type="password")
     if st.button("Entrar"):
         if "ACCESS_PASSWORD" in st.secrets and senha == st.secrets["ACCESS_PASSWORD"]:
@@ -66,8 +67,8 @@ if not st.session_state.auth:
             st.error("Senha Incorreta")
     st.stop()
 
-# 5. Interface Principal
-st.title("💎 NutriVendas: Versão Estável")
+# 5. Interface
+st.title("🚀 NutriVendas: Versão 2.0")
 
 col1, col2 = st.columns([1, 2])
 
@@ -81,10 +82,9 @@ with col1:
 
 with col2:
     if btn:
-        with st.spinner("🤖 A IA está escrevendo..."):
+        with st.spinner("🤖 A IA está escrevendo (Motor 2.0)..."):
             texto = chamar_ia(nicho, tipo, preco, obj)
             
-            # Lógica simples de separação
             p1, p2, p3 = texto, "...", "..."
             
             if "[PARTE1]" in texto:
@@ -96,7 +96,6 @@ with col2:
                     if len(resto) > 1:
                         p3 = resto[1].strip()
             
-            # Mostra na tela
             aba1, aba2, aba3 = st.tabs(["📝 Posts", "💬 Scripts", "🔗 Bio"])
             aba1.markdown(p1)
             aba2.markdown(p2)
