@@ -2,11 +2,11 @@ import streamlit as st
 import requests
 import json
 
-# 1. Configuração Básica (Sem CSS pesado para não esconder erros)
+# 1. Configuração Básica
 st.set_page_config(page_title="NutriVendas Debug", page_icon="🔧", layout="wide")
 
 st.title("🔧 NutriVendas: Modo Diagnóstico")
-st.info("Se você está lendo isso, o site carregou.")
+st.info("Sistema carregado. Pronto para teste.")
 
 # 2. Verifica Chaves
 if "GOOGLE_API_KEY" not in st.secrets:
@@ -16,10 +16,10 @@ if "ACCESS_PASSWORD" not in st.secrets:
     st.error("Falta ACCESS_PASSWORD")
     st.stop()
 
-# 3. Função de IA (Com tratamento de Segurança do Google)
+# 3. Função de IA (Nome correto: consultar_ia)
 def consultar_ia(nicho, tipo, preco, objetivo):
     api_key = st.secrets["GOOGLE_API_KEY"]
-    # Vamos usar o modelo padrão 1.5 Flash que é mais estável para testes
+    # Usando modelo 1.5 Flash para garantir estabilidade no teste
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     
@@ -27,10 +27,10 @@ def consultar_ia(nicho, tipo, preco, objetivo):
     Crie uma estratégia de marketing para Nutricionista.
     Nicho: {nicho}. Atendimento: {tipo}. Preço: {preco}. Meta: {objetivo}.
     
-    IMPORTANTE: Retorne APENAS texto simples.
+    IMPORTANTE: Retorne APENAS texto simples, sem formatação complexa.
     
-    SEÇÃO 1: 3 Ideias de Posts (Título e Legenda).
-    SEÇÃO 2: Script de Vendas para Direct.
+    SEÇÃO 1: 3 Ideias de Posts.
+    SEÇÃO 2: Script de Vendas.
     SEÇÃO 3: Bio do Instagram.
     """
     
@@ -39,31 +39,21 @@ def consultar_ia(nicho, tipo, preco, objetivo):
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
         
-        # DEBUG: Mostra o status da conexão na tela
-        st.write(f"📡 Status da Conexão: {response.status_code}")
+        st.write(f"📡 Status da Conexão: {response.status_code}") # Debug visual
         
         if response.status_code == 200:
             dados = response.json()
-            
-            # Verifica se o Google bloqueou por segurança
-            if "promptFeedback" in dados and "blockReason" in dados["promptFeedback"]:
-                return "⚠️ ERRO: O Google bloqueou este pedido (Safety Filter)."
-                
             if "candidates" in dados and len(dados["candidates"]) > 0:
-                candidato = dados["candidates"][0]
-                if "content" in candidato:
-                    return candidato["content"]["parts"][0]["text"]
-                elif "finishReason" in candidato:
-                    return f"⚠️ A IA parou de gerar. Motivo: {candidato['finishReason']}"
-            
-            return f"⚠️ Resposta vazia ou estranha: {json.dumps(dados)}"
+                return dados["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                return f"⚠️ Resposta vazia do Google: {dados}"
         else:
             return f"❌ Erro HTTP: {response.text}"
             
     except Exception as e:
-        return f"❌ Erro Crítico no Python: {str(e)}"
+        return f"❌ Erro Crítico Python: {str(e)}"
 
-# 4. Login Simples
+# 4. Login
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
@@ -78,7 +68,7 @@ if not st.session_state.auth:
 
 # 5. O Formulário
 with st.form("debug_form"):
-    st.write("### Preencha para Testar")
+    st.write("### Teste de Geração")
     nicho = st.text_input("Nicho", "Emagrecimento")
     tipo = st.selectbox("Tipo", ["Online", "Presencial"])
     preco = st.text_input("Preço", "R$ 200")
@@ -87,7 +77,9 @@ with st.form("debug_form"):
     btn = st.form_submit_button("RODAR TESTE")
 
 if btn:
-    st.write("---")
-    st.warning("🔄 Enviando para o Google... aguarde.")
+    st.warning("🔄 Enviando...")
+    # AQUI ESTAVA O ERRO: Agora o nome está completo
+    resultado = consultar_ia(nicho, tipo, preco, obj)
     
-    resultado = consultar_
+    st.success("✅ Concluído!")
+    st.text_area("Resultado Bruto:", value=resultado, height=500)
