@@ -2,36 +2,52 @@ import streamlit as st
 import requests
 import json
 
-# 1. Configuração Básica
-st.set_page_config(page_title="NutriVendas Debug", page_icon="🔧", layout="wide")
+# 1. CONFIGURAÇÃO (Obrigatório ser a primeira linha)
+st.set_page_config(page_title="NutriVendas 2.5", page_icon="⚡", layout="wide")
 
-st.title("🔧 NutriVendas: Modo Diagnóstico")
-st.info("Sistema carregado. Pronto para teste.")
+# 2. ESTILO
+st.markdown("""
+<style>
+    .stApp { background-color: #0E1117; color: white; }
+    div.stButton > button { background-color: #008000; color: white; border-radius: 8px; width: 100%; font-weight: bold; }
+    input, select, textarea { background-color: #262730 !important; color: white !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { background-color: #262730; border-radius: 5px; color: white; }
+    .stTabs [aria-selected="true"] { background-color: #008000; color: white; }
+</style>
+""", unsafe_allow_html=True)
 
-# 2. Verifica Chaves
+# 3. SEGURANÇA
 if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("Falta GOOGLE_API_KEY")
+    st.error("⚠️ Falta GOOGLE_API_KEY")
     st.stop()
 if "ACCESS_PASSWORD" not in st.secrets:
-    st.error("Falta ACCESS_PASSWORD")
+    st.error("⚠️ Falta ACCESS_PASSWORD")
     st.stop()
 
-# 3. Função de IA (Nome correto: consultar_ia)
-def consultar_ia(nicho, tipo, preco, objetivo):
+# 4. FUNÇÃO DE CONEXÃO (MODELO 2.5 FLASH)
+def gerar_conteudo(nicho, tipo, preco, objetivo):
     api_key = st.secrets["GOOGLE_API_KEY"]
-    # Usando modelo 1.5 Flash para garantir estabilidade no teste
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # AQUI ESTÁ O SEGREDO: Usando o modelo que apareceu no seu Raio-X
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
     headers = {"Content-Type": "application/json"}
     
     prompt = f"""
-    Crie uma estratégia de marketing para Nutricionista.
-    Nicho: {nicho}. Atendimento: {tipo}. Preço: {preco}. Meta: {objetivo}.
+    Aja como especialista em marketing para Nutricionistas.
+    Dados: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    IMPORTANTE: Retorne APENAS texto simples, sem formatação complexa.
+    Crie 3 seções separadas por marcadores EXATOS:
     
-    SEÇÃO 1: 3 Ideias de Posts.
-    SEÇÃO 2: Script de Vendas.
-    SEÇÃO 3: Bio do Instagram.
+    [CONTEUDO]
+    - 3 Ideias de Posts (Título + Legenda)
+    
+    [VENDAS]
+    - 1 Script de Direct
+    - 1 Script de Objeção
+    
+    [BIO]
+    - Bio otimizada + Link
     """
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -39,47 +55,75 @@ def consultar_ia(nicho, tipo, preco, objetivo):
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
         
-        st.write(f"📡 Status da Conexão: {response.status_code}") # Debug visual
-        
         if response.status_code == 200:
             dados = response.json()
+            # Navega com segurança na resposta do Google
             if "candidates" in dados and len(dados["candidates"]) > 0:
-                return dados["candidates"][0]["content"]["parts"][0]["text"]
-            else:
-                return f"⚠️ Resposta vazia do Google: {dados}"
+                parts = dados["candidates"][0]["content"]["parts"]
+                if len(parts) > 0:
+                    return parts[0]["text"]
+            return "⚠️ A IA respondeu vazio."
         else:
-            return f"❌ Erro HTTP: {response.text}"
+            return f"Erro Google (Status {response.status_code}): {response.text}"
             
     except Exception as e:
-        return f"❌ Erro Crítico Python: {str(e)}"
+        return f"Erro Conexão: {str(e)}"
 
-# 4. Login
+def separar_texto(text):
+    c, v, b = text, "", ""
+    # Se der erro no Google, não tenta separar
+    if "Erro" in text:
+        return text, "", ""
+        
+    if "[CONTEUDO]" in text:
+        p = text.split("[VENDAS]")
+        c = p[0].replace("[CONTEUDO]", "").strip()
+        if len(p) > 1:
+            p2 = p[1].split("[BIO]")
+            v = p2[0].strip()
+            if len(p2) > 1: b = p2[1].strip()
+    return c, v, b
+
+# 5. LOGIN
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    senha = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if senha == st.secrets["ACCESS_PASSWORD"]:
-            st.session_state.auth = True
-            st.rerun()
-        else:
-            st.error("Senha errada")
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.title("🔒 Login")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Entrar"):
+            if senha == st.secrets["ACCESS_PASSWORD"]:
+                st.session_state.auth = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta")
     st.stop()
 
-# 5. O Formulário
-with st.form("debug_form"):
-    st.write("### Teste de Geração")
-    nicho = st.text_input("Nicho", "Emagrecimento")
-    tipo = st.selectbox("Tipo", ["Online", "Presencial"])
-    preco = st.text_input("Preço", "R$ 200")
-    obj = st.selectbox("Objetivo", ["Agenda", "Vendas"])
-    
-    btn = st.form_submit_button("RODAR TESTE")
+# 6. APP PRINCIPAL
+st.title("⚡ NutriVendas: Versão 2.5")
 
-if btn:
-    st.warning("🔄 Enviando...")
-    # AQUI ESTAVA O ERRO: Agora o nome está completo
-    resultado = consultar_ia(nicho, tipo, preco, obj)
-    
-    st.success("✅ Concluído!")
-    st.text_area("Resultado Bruto:", value=resultado, height=500)
+c1, c2 = st.columns([1, 2])
+with c1:
+    with st.form("form"):
+        nicho = st.text_input("Nicho", "Emagrecimento")
+        tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
+        preco = st.text_input("Preço", "R$ 200")
+        obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
+        btn = st.form_submit_button("GERAR AGORA")
+
+with c2:
+    if btn:
+        with st.spinner("🤖 Consultando Gemini 2.5..."):
+            res = gerar_conteudo(nicho, tipo, preco, obj)
+            
+            # Se a resposta for curta demais ou erro, mostra direto
+            if "Erro" in res or len(res) < 50:
+                st.error(res)
+            else:
+                c, v, b = separar_texto(res)
+                
+                t1, t2, t3 = st.tabs(["Conteúdo", "Vendas", "Bio"])
+                t1.markdown(c)
+                t2.markdown(v)
+                t3.markdown(b)
