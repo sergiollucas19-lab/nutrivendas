@@ -2,38 +2,40 @@ import streamlit as st
 import requests
 import json
 
-# 1. Configuração da Página
-st.set_page_config(page_title="NutriVendas PRO", page_icon="💎", layout="wide")
+# 1. Configuração (Visual Padrão para não dar conflito)
+st.set_page_config(page_title="NutriVendas Blindado", page_icon="🛡️", layout="wide")
 
-# 2. Menu Lateral (Agora com o modelo 1.5 liberado!)
+# 2. Menu Lateral (Seu motor novo)
 with st.sidebar:
-    st.header("⚙️ Motor da IA")
+    st.header("⚙️ Motor PRO")
     modelo = st.selectbox(
         "Escolha o Modelo:", 
         [
-            "gemini-1.5-flash",    # O MELHOR (Agora liberado para você)
-            "gemini-2.5-flash",    # O mais novo
-            "gemini-2.0-flash"     # Alternativa
+            "gemini-1.5-flash",    # O MELHOR (Sua conta paga libera este)
+            "gemini-2.0-flash",    # Alternativa
+            "gemini-2.5-flash"     # Alternativa
         ]
     )
-    st.success(f"Conta VIP Ativa. Usando: {modelo}")
+    st.success(f"Conta Ativa. Usando: {modelo}")
 
-# 3. Função IA
+# 3. Função IA (Prompt Seguro)
 def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     if "GOOGLE_API_KEY" not in st.secrets:
-        return "ERRO: Configure a GOOGLE_API_KEY."
+        return "ERRO: Falta a GOOGLE_API_KEY."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_escolhido}:generateContent?key={api_key}"
     
-    # Prompt Otimizado
     prompt = f"""
     Aja como expert em marketing para Nutricionistas.
     Contexto: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    IMPORTANTE: NÃO use formatação matemática (LaTeX) ou cifrão solto.
+    IMPORTANTE: 
+    - NÃO use tabelas.
+    - NÃO use formatação matemática (LaTeX).
+    - Escreva apenas texto simples.
     
-    Estrutura da Resposta:
+    Crie 3 seções separadas EXATAMENTE assim:
     
     [PARTE1]
     3 Ideias de Posts (Título e Legenda)
@@ -57,13 +59,7 @@ def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     except Exception as e:
         return f"ERRO CONEXÃO: {e}"
 
-# 4. Função de Limpeza (O Segredo para não dar Tela Branca)
-def limpar_texto(texto):
-    if not isinstance(texto, str): return str(texto)
-    # Troca o cifrão ($) por HTML seguro para não bugar o site
-    return texto.replace("$", "&#36;")
-
-# 5. Login
+# 4. Login
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
@@ -77,9 +73,9 @@ if not st.session_state.auth:
             st.error("Senha incorreta")
     st.stop()
 
-# 6. Interface Principal
-st.title("💎 NutriVendas: Versão PRO")
-st.write("Sistema desbloqueado e sem limites.")
+# 5. Interface Principal (MODO SEGURO)
+st.title("💎 NutriVendas: Modo Texto Puro")
+st.info("Visualização em Caixas de Texto (Anti-Crash)")
 
 col1, col2 = st.columns([1, 2])
 
@@ -94,15 +90,14 @@ with col1:
 with col2:
     if btn:
         with st.spinner(f"Gerando com {modelo}..."):
-            bruto = gerar_marketing(nicho, tipo, preco, obj, modelo)
-            
-            # Limpeza de Segurança
-            texto = limpar_texto(bruto)
+            texto = gerar_marketing(nicho, tipo, preco, obj, modelo)
             
             if "ERRO" in texto:
                 st.error(texto)
             else:
                 p1, p2, p3 = texto, "...", "..."
+                
+                # Tenta separar as partes
                 if "[PARTE1]" in texto:
                     try:
                         partes = texto.split("[PARTE2]")
@@ -113,10 +108,20 @@ with col2:
                             if len(resto) > 1:
                                 p3 = resto[1].strip()
                     except:
-                        pass # Se falhar a divisão, mostra tudo bruto
+                        pass 
                 
-                # Exibição Segura
+                # AQUI É O SEGREDO: Usamos 'text_area' em vez de 'markdown'
+                # Isso impede o navegador de tentar desenhar símbolos matemáticos
                 abas = st.tabs(["📝 Conteúdo", "💰 Vendas", "🔗 Bio"])
-                abas[0].markdown(p1, unsafe_allow_html=True)
-                abas[1].markdown(p2, unsafe_allow_html=True)
-                abas[2].markdown(p3, unsafe_allow_html=True)
+                
+                with abas[0]:
+                    st.write("🔽 Copie o texto abaixo:")
+                    st.text_area("Posts", value=p1, height=450)
+                    
+                with abas[1]:
+                    st.write("🔽 Copie o texto abaixo:")
+                    st.text_area("Scripts", value=p2, height=450)
+                    
+                with abas[2]:
+                    st.write("🔽 Copie o texto abaixo:")
+                    st.text_area("Bio", value=p3, height=200)
