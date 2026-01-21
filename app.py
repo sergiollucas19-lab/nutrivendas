@@ -2,23 +2,23 @@ import streamlit as st
 import requests
 import json
 
-# 1. Configuração (Visual Padrão para não dar conflito)
-st.set_page_config(page_title="NutriVendas Blindado", page_icon="🛡️", layout="wide")
+# 1. Configuração (Blindada)
+st.set_page_config(page_title="NutriVendas VIP", page_icon="💎", layout="wide")
 
-# 2. Menu Lateral (Seu motor novo)
+# 2. Menu Lateral (Voltando para o 2.5 que funciona e agora é pago/ilimitado)
 with st.sidebar:
-    st.header("⚙️ Motor PRO")
+    st.header("⚙️ Motor Potente")
     modelo = st.selectbox(
         "Escolha o Modelo:", 
         [
-            "gemini-1.5-flash",    # O MELHOR (Sua conta paga libera este)
-            "gemini-2.0-flash",    # Alternativa
-            "gemini-2.5-flash"     # Alternativa
+            "gemini-2.5-flash",                    # O CAMPEÃO (Agora ilimitado)
+            "gemini-2.0-flash-lite-preview-02-05", # O Backup rápido
+            "gemini-2.0-flash"                     # Outra opção
         ]
     )
-    st.success(f"Conta Ativa. Usando: {modelo}")
+    st.success(f"Modo VIP Ativo. Usando: {modelo}")
 
-# 3. Função IA (Prompt Seguro)
+# 3. Função IA
 def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     if "GOOGLE_API_KEY" not in st.secrets:
         return "ERRO: Falta a GOOGLE_API_KEY."
@@ -30,21 +30,15 @@ def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     Aja como expert em marketing para Nutricionistas.
     Contexto: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    IMPORTANTE: 
+    REGRAS DE SEGURANÇA:
     - NÃO use tabelas.
-    - NÃO use formatação matemática (LaTeX).
-    - Escreva apenas texto simples.
+    - NÃO use LaTeX.
+    - Escreva texto simples e direto.
     
-    Crie 3 seções separadas EXATAMENTE assim:
-    
-    [PARTE1]
-    3 Ideias de Posts (Título e Legenda)
-    
-    [PARTE2]
-    Script de Vendas (Direct e Objeção)
-    
-    [PARTE3]
-    Bio do Instagram
+    Crie 3 seções:
+    [PARTE1] 3 Ideias de Posts
+    [PARTE2] Scripts de Vendas
+    [PARTE3] Bio do Instagram
     """
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -73,9 +67,9 @@ if not st.session_state.auth:
             st.error("Senha incorreta")
     st.stop()
 
-# 5. Interface Principal (MODO SEGURO)
-st.title("💎 NutriVendas: Modo Texto Puro")
-st.info("Visualização em Caixas de Texto (Anti-Crash)")
+# 5. Interface
+st.title("💎 NutriVendas: Versão Final")
+st.info("Sistema operando com Gemini 2.5 (Ilimitado) e Proteção Anti-Crash.")
 
 col1, col2 = st.columns([1, 2])
 
@@ -96,8 +90,6 @@ with col2:
                 st.error(texto)
             else:
                 p1, p2, p3 = texto, "...", "..."
-                
-                # Tenta separar as partes
                 if "[PARTE1]" in texto:
                     try:
                         partes = texto.split("[PARTE2]")
@@ -107,21 +99,17 @@ with col2:
                             p2 = resto[0].strip()
                             if len(resto) > 1:
                                 p3 = resto[1].strip()
-                    except:
-                        pass 
-                
-                # AQUI É O SEGREDO: Usamos 'text_area' em vez de 'markdown'
-                # Isso impede o navegador de tentar desenhar símbolos matemáticos
+                    except: pass
+
                 abas = st.tabs(["📝 Conteúdo", "💰 Vendas", "🔗 Bio"])
                 
+                # PROTEÇÃO TOTAL: Caixas de Texto
                 with abas[0]:
-                    st.write("🔽 Copie o texto abaixo:")
-                    st.text_area("Posts", value=p1, height=450)
-                    
+                    st.write("### Posts Sugeridos:")
+                    st.text_area("Copie aqui:", value=p1, height=450)
                 with abas[1]:
-                    st.write("🔽 Copie o texto abaixo:")
-                    st.text_area("Scripts", value=p2, height=450)
-                    
+                    st.write("### Scripts de Vendas:")
+                    st.text_area("Copie aqui:", value=p2, height=450)
                 with abas[2]:
-                    st.write("🔽 Copie o texto abaixo:")
-                    st.text_area("Bio", value=p3, height=200)
+                    st.write("### Bio do Perfil:")
+                    st.text_area("Copie aqui:", value=p3, height=200)
