@@ -2,87 +2,61 @@ import streamlit as st
 import requests
 import json
 
-# 1. Configuração da Página
+# 1. CONFIGURAÇÃO (O segredo da estabilidade)
 st.set_page_config(
-    page_title="NutriVendas Elite",
+    page_title="NutriVendas Pro",
     page_icon="💎",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# 2. CSS "CLEAN" (Só o necessário para o luxo, sem quebrar o site)
+# 2. ESTILO SEGURO (Apenas cores de fundo e texto, sem mexer nos botões)
 st.markdown("""
 <style>
-    /* Fundo Preto Profundo */
+    /* Fundo Preto Real */
     .stApp {
-        background-color: #000000;
-        color: #E0E0E0;
+        background-color: #050505;
     }
     
-    /* Títulos Dourados */
-    h1, h2, h3, h4 {
+    /* Textos Principais em Dourado */
+    h1, h2, h3 {
         color: #D4AF37 !important;
-        font-family: sans-serif;
-        font-weight: 600;
     }
     
-    /* Ajuste da Barra Lateral */
-    section[data-testid="stSidebar"] {
-        background-color: #111111;
-        border-right: 1px solid #333;
+    /* Texto normal em cinza claro para leitura confortável */
+    p, label, .stMarkdown {
+        color: #E0E0E0 !important;
     }
     
-    /* Botão Dourado Seguro */
-    div.stButton > button {
-        background-color: #D4AF37;
-        color: black;
-        border: none;
-        font-weight: bold;
-        text-transform: uppercase;
-        width: 100%;
-        padding: 0.5rem;
-    }
-    div.stButton > button:hover {
-        background-color: #F2C94C;
-        color: black;
-    }
-    
-    /* Caixas de Texto (Deixar nativo do Streamlit escuro, é mais seguro) */
-    .stTextArea textarea {
-        background-color: #1a1a1a;
-        color: #f0f0f0;
-        border: 1px solid #444;
-    }
+    /* Removemos as estilizações forçadas de botão e input que davam tela branca */
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Menu Lateral
+# 3. BARRA LATERAL
 with st.sidebar:
-    st.header("⚙️ Painel Elite")
+    st.header("⚙️ Painel de Controle")
     modelo = st.selectbox(
         "Motor de Inteligência:", 
         ["gemini-2.5-flash", "gemini-1.5-flash"]
     )
-    st.markdown("---")
-    st.success("💎 Status: VIP Ativo")
+    st.write("---")
+    st.info("💎 Status: Conta VIP Ativa")
 
-# 4. Função IA
+# 4. FUNÇÃO IA (Blindada contra erros)
 def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     if "GOOGLE_API_KEY" not in st.secrets: return "ERRO: Configure a GOOGLE_API_KEY."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_escolhido}:generateContent?key={api_key}"
     
-    # Prompt Direto
     prompt = f"""
     Aja como expert em marketing para Nutricionistas.
     Contexto: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    IMPORTANTE: Não use Markdown complexo (tabelas/negrito). Use texto simples.
+    IMPORTANTE: Não use tabelas ou formatação complexa.
     
     Estrutura:
     [PARTE1] 3 Ideias de Posts (Título e Legenda)
-    [PARTE2] Scripts de Vendas
+    [PARTE2] Scripts de Vendas (Direct e Quebra de Objeção)
     [PARTE3] Bio do Instagram
     """
     
@@ -98,44 +72,45 @@ def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     except Exception as e:
         return f"ERRO CONEXÃO: {e}"
 
-# 5. Sanitização (Segurança contra o crash do cifrão)
+# 5. SANITIZAÇÃO (Troca cifrão por texto)
 def limpar_texto(texto):
     if not isinstance(texto, str): return str(texto)
-    # Troca cifrão por texto para não ativar matemática
+    # Essa substituição é essencial para o nicho de emagrecimento
     return texto.replace("$", " reais ")
 
-# 6. Login
+# 6. LOGIN SIMPLES
 if "auth" not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
     col1, col2, col3 = st.columns([1,1,1])
     with col2:
-        st.title("🔒 Login")
+        st.title("🔒 Acesso")
         senha = st.text_input("Senha", type="password")
-        if st.button("ACESSAR"):
+        if st.button("ENTRAR"):
             if senha == st.secrets["ACCESS_PASSWORD"]:
                 st.session_state.auth = True
                 st.rerun()
     st.stop()
 
-# 7. Interface Principal
-st.title("🏆 NutriVendas Elite")
-st.markdown("Estratégia de Marketing Premium.")
+# 7. INTERFACE PRINCIPAL
+st.title("💎 NutriVendas Premium")
+st.write("Estratégia de Marketing de Alta Conversão.")
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.markdown("### Configuração")
+    st.markdown("### 🎯 Configuração")
     with st.form("form_nutri"):
         nicho = st.text_input("Nicho", "Emagrecimento")
         tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
         preco = st.text_input("Valor", "R$ 200")
         obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
-        st.write("")
+        st.write("") # Espaço
+        # O botão nativo é mais estável
         btn = st.form_submit_button("GERAR ESTRATÉGIA")
 
 with col2:
     if btn:
-        with st.spinner("💎 Processando estratégia..."):
+        with st.spinner("💎 Processando..."):
             texto_bruto = gerar_marketing(nicho, tipo, preco, obj, modelo)
             texto = limpar_texto(texto_bruto)
             
@@ -154,17 +129,14 @@ with col2:
                                 p3 = resto[1].strip()
                     except: pass
                 
-                # Exibição Segura (Abas com Caixa de Texto Nativa)
-                # Não tentamos pintar a caixa de texto com CSS agressivo
-                # O fundo do site já é preto, então a caixa cinza escuro fica elegante.
-                
+                # Visualização Segura e Limpa
                 abas = st.tabs(["📝 Conteúdo", "💰 Vendas", "🔗 Bio"])
                 
                 with abas[0]:
-                    st.text_area("Posts Sugeridos", value=p1, height=500)
+                    st.text_area("Copie seus posts:", value=p1, height=500)
                     
                 with abas[1]:
-                    st.text_area("Scripts de Vendas", value=p2, height=500)
+                    st.text_area("Copie seus scripts:", value=p2, height=500)
                     
                 with abas[2]:
-                    st.text_area("Bio Sugerida", value=p3, height=200)
+                    st.text_area("Copie sua bio:", value=p3, height=200)
