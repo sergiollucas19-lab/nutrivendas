@@ -1,45 +1,145 @@
 import streamlit as st
 import requests
+import json
 
-st.set_page_config(page_title="Raio-X Google", layout="wide")
+# ----------------------------
+# 1. CONFIGURAÇÃO VISUAL
+# ----------------------------
+st.set_page_config(page_title="NutriVendas", page_icon="📈", layout="wide")
 
-st.title("🕵️ Diagnóstico de Modelos do Google")
-st.write("Vamos ver quais modelos estão disponíveis para a sua chave.")
+st.markdown("""
+<style>
+    .stApp { background-color: #0E1117; color: #FFFFFF; }
+    h1, h2, h3, h4 { color: #EEEEEE !important; }
+    div.stButton > button {
+        background-color: #008000; color: white; border-radius: 8px; width: 100%; font-weight: bold;
+    }
+    .stTextInput input, .stSelectbox div, .stTextArea textarea {
+        background-color: #262730 !important; color: white !important; border-radius: 8px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# 1. Verifica se a chave existe
+# ----------------------------
+# 2. SEGURANÇA (SECRETS)
+# ----------------------------
 if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("❌ Chave não encontrada nos Secrets!")
+    st.error("⚠️ Configure a GOOGLE_API_KEY nos Secrets!")
+    st.stop()
+if "ACCESS_PASSWORD" not in st.secrets:
+    st.error("⚠️ Configure a ACCESS_PASSWORD nos Secrets!")
     st.stop()
 
-api_key = st.secrets["GOOGLE_API_KEY"]
-# Mostra só o começo e o fim da chave para confirmar que leu certo
-st.info(f"🔑 Lendo chave: {api_key[:5]}...{api_key[-5:]}")
-
-# 2. Pergunta pro Google: "O que você tem aí?"
-url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-
-try:
-    response = requests.get(url)
+# ----------------------------
+# 3. FUNÇÃO DE CONEXÃO (GEMINI 2.5)
+# ----------------------------
+def chamar_ia_direto(nicho, tipo, preco, objetivo):
+    api_key = st.secrets["GOOGLE_API_KEY"]
     
-    if response.status_code == 200:
-        dados = response.json()
-        modelos = dados.get('models', [])
+    # ATUALIZADO: Usando o modelo que você tem acesso (Gemini 2.5 Flash)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    headers = {"Content-Type": "application/json"}
+    
+    prompt = f"""
+    Aja como especialista em marketing para Nutricionistas.
+    Dados: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
+    
+    Crie 3 seções separadas por marcadores EXATOS:
+    
+    [CONTEUDO]
+    - 3 Ideias de Posts (Título + Legenda)
+    - 3 Ideias de Stories
+    
+    [VENDAS]
+    - Script de resposta para "Como funciona?"
+    - Script para objeção "Tá caro"
+    
+    [BIO]
+    - Bio otimizada
+    - Frase para Link
+    """
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
         
-        if modelos:
-            st.success(f"✅ Sucesso! Encontrei {len(modelos)} modelos disponíveis.")
-            st.write("Aqui estão os nomes exatos que devemos usar:")
-            
-            # Lista bonitinha na tela
-            for m in modelos:
-                nome = m['name'].replace('models/', '')
-                st.code(nome, language="text")
+        if response.status_code == 200:
+            resultado = response.json()
+            try:
+                texto_final = resultado['candidates'][0]['content']['parts'][0]['text']
+                return texto_final
+            except:
+                return "A IA respondeu, mas não consegui ler o texto. Tente novamente."
         else:
-            st.warning("⚠️ A conexão funcionou, mas a lista de modelos veio vazia!")
-            st.write("Isso significa que a API Generative Language não está ativada nessa chave.")
+            return f"Erro no Google (Status {response.status_code}): {response.text}"
             
-    else:
-        st.error(f"❌ Erro de Conexão: {response.status_code}")
-        st.json(response.json())
+    except Exception as e:
+        return f"Erro de conexão: {e}"
 
-except Exception as e:
-    st.error(f"Erro grave: {e}")
+def separar_texto(text):
+    c, v, b = text, "", ""
+    if "[CONTEUDO]" in text:
+        parts = text.split("[VENDAS]")
+        c = parts[0].replace("[CONTEUDO]", "").strip()
+        if len(parts) > 1:
+            sales_parts = parts[1].split("[BIO]")
+            v = sales_parts[0].strip()
+            if len(sales_parts) > 1:
+                b = sales_parts[1].strip()
+    return c, v, b
+
+# ----------------------------
+# 4. TELA DE LOGIN
+# ----------------------------
+if "auth" not in st.session_state: st.session_state.auth = False
+
+if not st.session_state.auth:
+    c1, c2, c3 = st.columns([1,1,1])
+    with c2:
+        st.title("🔒 Login NutriVendas")
+        pwd = st.text_input("Senha:", type="password")
+        if st.button("Entrar"):
+            if pwd == st.secrets["ACCESS_PASSWORD"]:
+                st.session_state.auth = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+    st.stop()
+
+# ----------------------------
+# 5. O APP PRINCIPAL
+# ----------------------------
+st.title("🚀 NutriVendas: IA 2.5")
+st.write("Sistema de Marketing Automático")
+
+col1, col2 = st.columns([1, 2])
+
+with col1:
+    with st.form("main_form"):
+        st.subheader("Dados do Nutri")
+        nicho = st.text_input("Nicho:", "Emagrecimento")
+        tipo = st.selectbox("Atendimento:", ["Online", "Presencial"])
+        preco = st.text_input("Preço Consulta:", "R$ 200")
+        obj = st.selectbox("Objetivo:", ["Agenda Cheia", "Vendas"])
+        btn = st.form_submit_button("GERAR AGORA ⚡")
+
+with col2:
+    if btn:
+        with st.spinner("⚡ Usando Gemini 2.5 Flash..."):
+            texto_bruto = chamar_ia_direto(nicho, tipo, preco, obj)
+            
+            if "Erro" in texto_bruto:
+                st.error(texto_bruto)
+            else:
+                conteudo, vendas, bio = separar_texto(texto_bruto)
+                
+                t1, t2, t3 = st.tabs(["📲 Conteúdo", "💰 Scripts", "🔗 Bio"])
+                t1.markdown(conteudo)
+                t2.markdown(vendas)
+                t3.markdown(bio)
