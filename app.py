@@ -3,74 +3,96 @@ import requests
 import json
 
 # 1. Configuração da Página
-st.set_page_config(page_title="NutriVendas Gold", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="NutriVendas Black", page_icon="💎", layout="wide")
 
-# 2. DESIGN PREMIUM (CSS CUSTOMIZADO)
+# 2. CSS DE LUXO (A MÁGICA VISUAL)
 st.markdown("""
 <style>
-    /* Fundo Geral */
+    /* Fundo Dark Mode Real */
     .stApp {
-        background-color: #0E1117;
-    }
-    
-    /* Títulos Dourados */
-    h1, h2, h3 {
-        color: #D4AF37 !important;
-        font-family: 'Helvetica Neue', sans-serif;
-    }
-    
-    /* Card de Resultado (O Segredo da Beleza) */
-    .premium-card {
-        background-color: #1E1E1E;
-        border: 1px solid #D4AF37;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    
-    /* Texto dentro do card */
-    .premium-card p, .premium-card li {
+        background-color: #050505;
         color: #E0E0E0;
-        font-size: 16px;
-        line-height: 1.6;
     }
     
-    /* Botão de Luxo */
-    div.stButton > button {
-        background: linear-gradient(45deg, #D4AF37, #C5A028);
-        color: black;
-        font-weight: bold;
-        border: none;
-        width: 100%;
-        padding: 12px;
-        border-radius: 8px;
+    /* Títulos Dourados Metálicos */
+    h1, h2, h3 {
+        color: #F2C94C !important;
+        font-family: 'Arial', sans-serif;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 2px;
+    }
+    
+    /* Maquiagem das Caixas de Texto (Para não parecerem simples) */
+    .stTextArea textarea {
+        background-color: #121212 !important;
+        color: #D4AF37 !important; /* Texto Dourado */
+        border: 1px solid #333 !important;
+        border-radius: 10px;
+        font-family: 'Courier New', monospace; /* Fonte estilo Hacker/Premium */
+    }
+    .stTextArea textarea:focus {
+        border-color: #F2C94C !important;
+        box-shadow: 0 0 10px rgba(242, 201, 76, 0.2);
+    }
+    
+    /* Inputs (Onde você digita) */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+        background-color: #1E1E1E !important;
+        color: white !important;
+        border-radius: 8px;
+        border: 1px solid #444;
+    }
+    
+    /* Botão de Ouro */
+    div.stButton > button {
+        background: linear-gradient(90deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
+        color: black;
+        font-weight: 900;
+        border: none;
+        padding: 15px 32px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        margin: 4px 2px;
+        cursor: pointer;
+        border-radius: 12px;
+        width: 100%;
+        text-transform: uppercase;
+        transition: 0.3s;
     }
     div.stButton > button:hover {
-        background: linear-gradient(45deg, #EDC967, #D4AF37);
-        box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+        transform: scale(1.02);
+        box-shadow: 0 0 20px rgba(191, 149, 63, 0.6);
     }
     
-    /* Inputs Estilizados */
-    input, select, textarea {
-        background-color: #262730 !important;
-        color: white !important;
-        border: 1px solid #444 !important;
-        border-radius: 8px !important;
+    /* Abas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1E1E1E;
+        border-radius: 5px;
+        color: white;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #D4AF37 !important;
+        color: black !important;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # 3. Menu Lateral
 with st.sidebar:
-    st.header("⚙️ Motor V8")
+    st.header("⚙️ Painel de Controle")
     modelo = st.selectbox(
-        "Escolha o Modelo:", 
+        "Motor de IA:", 
         ["gemini-2.5-flash", "gemini-1.5-flash"]
     )
-    st.info("💎 Status: Conta VIP Ativa")
+    st.markdown("---")
+    st.info("💎 **Licença VIP Ativa**")
 
 # 4. Função IA
 def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
@@ -83,22 +105,12 @@ def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     Aja como expert em marketing de luxo para Nutricionistas.
     Contexto: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    IMPORTANTE: 
-    - Use formatação Markdown (negrito, tópicos).
-    - NÃO use tabelas complexas.
+    IMPORTANTE: Não use Markdown complexo ou tabelas.
     
     Estrutura:
-    [PARTE1] 
-    ### 💡 3 Ideias de Conteúdo Viral
-    (Desenvolva títulos e legendas)
-    
-    [PARTE2] 
-    ### 💰 Scripts de Alta Conversão
-    (Direct e Quebra de Objeção)
-    
-    [PARTE3] 
-    ### 🚀 Bio Magnética
-    (Nome, Promessa e CTA)
+    [PARTE1] 3 Ideias de Posts Virais (Título e Legenda)
+    [PARTE2] Scripts de Vendas (Direct e Quebra de Objeção)
+    [PARTE3] Bio Magnética (Promessa e CTA)
     """
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -113,49 +125,45 @@ def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     except Exception as e:
         return f"ERRO CONEXÃO: {e}"
 
-# 5. O SEGREDO ANTI-CRASH (Mantém bonito, mas seguro)
-def sanitizar_texto(texto):
+# 5. Sanitização (Troca cifrão por texto pra não quebrar)
+def limpar_texto(texto):
     if not isinstance(texto, str): return str(texto)
-    # Substitui o cifrão ($) pelo código HTML dele (&#36;)
-    # O navegador desenha o cifrão, mas não tenta calcular matemática!
-    texto = texto.replace("$", "&#36;") 
-    return texto
+    return texto.replace("$", " reais ")
 
 # 6. Login
 if "auth" not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
     col1, col2, col3 = st.columns([1,1,1])
     with col2:
-        st.markdown("### 🔐 Acesso Restrito")
-        senha = st.text_input("Senha", type="password")
-        if st.button("ACESSAR SISTEMA"):
+        st.title("🔒 Acesso VIP")
+        senha = st.text_input("Senha de Acesso", type="password")
+        if st.button("DESBLOQUEAR SISTEMA"):
             if senha == st.secrets["ACCESS_PASSWORD"]:
                 st.session_state.auth = True
                 st.rerun()
     st.stop()
 
 # 7. Interface Principal
-st.title("🏆 NutriVendas Gold")
-st.markdown("Transforme seguidores em pacientes com estratégia premium.")
+st.title("💎 NutriVendas Black")
+st.markdown("Estratégia Premium com Tecnologia Blindada.")
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.markdown("### 🎯 Configuração")
+    st.markdown("### 🎯 Parâmetros")
     with st.form("form_nutri"):
         nicho = st.text_input("Nicho", "Emagrecimento")
         tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
         preco = st.text_input("Valor", "R$ 200")
         obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
-        btn = st.form_submit_button("GERAR ESTRATÉGIA PREMIUM")
+        st.markdown("<br>", unsafe_allow_html=True)
+        btn = st.form_submit_button("GERAR ESTRATÉGIA")
 
 with col2:
     if btn:
-        with st.spinner("💎 Criando estratégia de alto padrão..."):
+        with st.spinner("Conectando ao Neural Engine..."):
             texto_bruto = gerar_marketing(nicho, tipo, preco, obj, modelo)
-            
-            # Limpeza de Segurança (Para não dar tela branca)
-            texto = sanitizar_texto(texto_bruto)
+            texto = limpar_texto(texto_bruto)
             
             if "ERRO" in texto:
                 st.error(texto)
@@ -172,16 +180,20 @@ with col2:
                                 p3 = resto[1].strip()
                     except: pass
                 
-                # Exibição "CARD" (Bonito e Organizado)
-                abas = st.tabs(["📝 Conteúdo", "💰 Vendas", "🔗 Bio"])
+                # AQUI ESTÁ O TRUQUE:
+                # Usamos st.text_area (que é seguro e nunca cai)
+                # Mas o CSS lá em cima pintou ele de PRETO E DOURADO.
+                
+                abas = st.tabs(["Conteúdo", "Vendas", "Bio"])
                 
                 with abas[0]:
-                    st.markdown(f'<div class="premium-card">{p1}</div>', unsafe_allow_html=True)
-                    st.download_button("Baixar Posts", p1)
+                    st.markdown("### 📝 Posts Prontos")
+                    st.text_area("Posts", value=p1, height=500, label_visibility="collapsed")
                     
                 with abas[1]:
-                    st.markdown(f'<div class="premium-card">{p2}</div>', unsafe_allow_html=True)
-                    st.download_button("Baixar Scripts", p2)
+                    st.markdown("### 💰 Scripts de Conversão")
+                    st.text_area("Scripts", value=p2, height=500, label_visibility="collapsed")
                     
                 with abas[2]:
-                    st.markdown(f'<div class="premium-card">{p3}</div>', unsafe_allow_html=True)
+                    st.markdown("### 🔗 Bio do Perfil")
+                    st.text_area("Bio", value=p3, height=200, label_visibility="collapsed")
