@@ -3,114 +3,87 @@ import requests
 import json
 
 # 1. Configuração da Página
-st.set_page_config(page_title="NutriVendas Black", page_icon="💎", layout="wide")
+st.set_page_config(
+    page_title="NutriVendas Elite",
+    page_icon="💎",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# 2. CSS DE LUXO (A MÁGICA VISUAL)
+# 2. CSS "CLEAN" (Só o necessário para o luxo, sem quebrar o site)
 st.markdown("""
 <style>
-    /* Fundo Dark Mode Real */
+    /* Fundo Preto Profundo */
     .stApp {
-        background-color: #050505;
+        background-color: #000000;
         color: #E0E0E0;
     }
     
-    /* Títulos Dourados Metálicos */
-    h1, h2, h3 {
-        color: #F2C94C !important;
-        font-family: 'Arial', sans-serif;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 2px;
+    /* Títulos Dourados */
+    h1, h2, h3, h4 {
+        color: #D4AF37 !important;
+        font-family: sans-serif;
+        font-weight: 600;
     }
     
-    /* Maquiagem das Caixas de Texto (Para não parecerem simples) */
-    .stTextArea textarea {
-        background-color: #121212 !important;
-        color: #D4AF37 !important; /* Texto Dourado */
-        border: 1px solid #333 !important;
-        border-radius: 10px;
-        font-family: 'Courier New', monospace; /* Fonte estilo Hacker/Premium */
-    }
-    .stTextArea textarea:focus {
-        border-color: #F2C94C !important;
-        box-shadow: 0 0 10px rgba(242, 201, 76, 0.2);
+    /* Ajuste da Barra Lateral */
+    section[data-testid="stSidebar"] {
+        background-color: #111111;
+        border-right: 1px solid #333;
     }
     
-    /* Inputs (Onde você digita) */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] {
-        background-color: #1E1E1E !important;
-        color: white !important;
-        border-radius: 8px;
-        border: 1px solid #444;
-    }
-    
-    /* Botão de Ouro */
+    /* Botão Dourado Seguro */
     div.stButton > button {
-        background: linear-gradient(90deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
+        background-color: #D4AF37;
         color: black;
-        font-weight: 900;
         border: none;
-        padding: 15px 32px;
-        text-align: center;
-        text-decoration: none;
-        display: inline-block;
-        font-size: 16px;
-        margin: 4px 2px;
-        cursor: pointer;
-        border-radius: 12px;
-        width: 100%;
+        font-weight: bold;
         text-transform: uppercase;
-        transition: 0.3s;
+        width: 100%;
+        padding: 0.5rem;
     }
     div.stButton > button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 0 20px rgba(191, 149, 63, 0.6);
+        background-color: #F2C94C;
+        color: black;
     }
     
-    /* Abas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #1E1E1E;
-        border-radius: 5px;
-        color: white;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #D4AF37 !important;
-        color: black !important;
-        font-weight: bold;
+    /* Caixas de Texto (Deixar nativo do Streamlit escuro, é mais seguro) */
+    .stTextArea textarea {
+        background-color: #1a1a1a;
+        color: #f0f0f0;
+        border: 1px solid #444;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # 3. Menu Lateral
 with st.sidebar:
-    st.header("⚙️ Painel de Controle")
+    st.header("⚙️ Painel Elite")
     modelo = st.selectbox(
-        "Motor de IA:", 
+        "Motor de Inteligência:", 
         ["gemini-2.5-flash", "gemini-1.5-flash"]
     )
     st.markdown("---")
-    st.info("💎 **Licença VIP Ativa**")
+    st.success("💎 Status: VIP Ativo")
 
 # 4. Função IA
 def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
-    if "GOOGLE_API_KEY" not in st.secrets: return "ERRO: Falta API Key."
+    if "GOOGLE_API_KEY" not in st.secrets: return "ERRO: Configure a GOOGLE_API_KEY."
     
     api_key = st.secrets["GOOGLE_API_KEY"]
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_escolhido}:generateContent?key={api_key}"
     
+    # Prompt Direto
     prompt = f"""
-    Aja como expert em marketing de luxo para Nutricionistas.
+    Aja como expert em marketing para Nutricionistas.
     Contexto: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    IMPORTANTE: Não use Markdown complexo ou tabelas.
+    IMPORTANTE: Não use Markdown complexo (tabelas/negrito). Use texto simples.
     
     Estrutura:
-    [PARTE1] 3 Ideias de Posts Virais (Título e Legenda)
-    [PARTE2] Scripts de Vendas (Direct e Quebra de Objeção)
-    [PARTE3] Bio Magnética (Promessa e CTA)
+    [PARTE1] 3 Ideias de Posts (Título e Legenda)
+    [PARTE2] Scripts de Vendas
+    [PARTE3] Bio do Instagram
     """
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -125,9 +98,10 @@ def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
     except Exception as e:
         return f"ERRO CONEXÃO: {e}"
 
-# 5. Sanitização (Troca cifrão por texto pra não quebrar)
+# 5. Sanitização (Segurança contra o crash do cifrão)
 def limpar_texto(texto):
     if not isinstance(texto, str): return str(texto)
+    # Troca cifrão por texto para não ativar matemática
     return texto.replace("$", " reais ")
 
 # 6. Login
@@ -135,33 +109,33 @@ if "auth" not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
     col1, col2, col3 = st.columns([1,1,1])
     with col2:
-        st.title("🔒 Acesso VIP")
-        senha = st.text_input("Senha de Acesso", type="password")
-        if st.button("DESBLOQUEAR SISTEMA"):
+        st.title("🔒 Login")
+        senha = st.text_input("Senha", type="password")
+        if st.button("ACESSAR"):
             if senha == st.secrets["ACCESS_PASSWORD"]:
                 st.session_state.auth = True
                 st.rerun()
     st.stop()
 
 # 7. Interface Principal
-st.title("💎 NutriVendas Black")
-st.markdown("Estratégia Premium com Tecnologia Blindada.")
+st.title("🏆 NutriVendas Elite")
+st.markdown("Estratégia de Marketing Premium.")
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.markdown("### 🎯 Parâmetros")
+    st.markdown("### Configuração")
     with st.form("form_nutri"):
         nicho = st.text_input("Nicho", "Emagrecimento")
         tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
         preco = st.text_input("Valor", "R$ 200")
         obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.write("")
         btn = st.form_submit_button("GERAR ESTRATÉGIA")
 
 with col2:
     if btn:
-        with st.spinner("Conectando ao Neural Engine..."):
+        with st.spinner("💎 Processando estratégia..."):
             texto_bruto = gerar_marketing(nicho, tipo, preco, obj, modelo)
             texto = limpar_texto(texto_bruto)
             
@@ -180,20 +154,17 @@ with col2:
                                 p3 = resto[1].strip()
                     except: pass
                 
-                # AQUI ESTÁ O TRUQUE:
-                # Usamos st.text_area (que é seguro e nunca cai)
-                # Mas o CSS lá em cima pintou ele de PRETO E DOURADO.
+                # Exibição Segura (Abas com Caixa de Texto Nativa)
+                # Não tentamos pintar a caixa de texto com CSS agressivo
+                # O fundo do site já é preto, então a caixa cinza escuro fica elegante.
                 
-                abas = st.tabs(["Conteúdo", "Vendas", "Bio"])
+                abas = st.tabs(["📝 Conteúdo", "💰 Vendas", "🔗 Bio"])
                 
                 with abas[0]:
-                    st.markdown("### 📝 Posts Prontos")
-                    st.text_area("Posts", value=p1, height=500, label_visibility="collapsed")
+                    st.text_area("Posts Sugeridos", value=p1, height=500)
                     
                 with abas[1]:
-                    st.markdown("### 💰 Scripts de Conversão")
-                    st.text_area("Scripts", value=p2, height=500, label_visibility="collapsed")
+                    st.text_area("Scripts de Vendas", value=p2, height=500)
                     
                 with abas[2]:
-                    st.markdown("### 🔗 Bio do Perfil")
-                    st.text_area("Bio", value=p3, height=200, label_visibility="collapsed")
+                    st.text_area("Bio Sugerida", value=p3, height=200)
