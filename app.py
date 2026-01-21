@@ -2,58 +2,53 @@ import streamlit as st
 import requests
 import json
 
-# 1. Configuração
-st.set_page_config(page_title="NutriVendas Flex", page_icon="🎛️", layout="wide")
+# 1. Configuração Básica (Sem frescura)
+st.set_page_config(page_title="NutriVendas Funcional", page_icon="💪", layout="wide")
 
-# 2. CSS
-st.markdown("""
-<style>
-    .stApp { background-color: #0E1117; color: white; }
-    div.stButton > button { background-color: #008000; color: white; font-weight: bold; }
-    input, select, textarea { background-color: #262730 !important; color: white !important; }
-</style>
-""", unsafe_allow_html=True)
-
-# 3. Menu Lateral de Configuração
+# 2. Menu Lateral (Seleção de Motor)
 with st.sidebar:
-    st.header("⚙️ Configurações")
-    # AQUI ESTÁ A MÁGICA: Você escolhe o motor
-    modelo_escolhido = st.selectbox(
-        "Escolha o Motor da IA:",
-        ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"],
-        index=0  # Começa com o 1.5 que é mais garantido
+    st.header("⚙️ Configuração")
+    st.write("Se um falhar, tente o outro:")
+    modelo = st.selectbox(
+        "Escolha o Modelo:", 
+        [
+            "gemini-2.5-flash",                    # O potente (seu favorito)
+            "gemini-2.0-flash-lite-preview-02-05", # O grátis (reserva)
+            "gemini-exp-1206"                      # O experimental
+        ]
     )
-    st.info(f"Usando: {modelo_escolhido}")
 
-# 4. Função IA (Dinâmica)
-def chamar_ia(nicho, tipo, preco, objetivo, modelo):
-    if "GOOGLE_API_KEY" not in st.secrets: return "ERRO: Falta configurar GOOGLE_API_KEY"
+# 3. Função de Inteligência
+def gerar_marketing(nicho, tipo, preco, objetivo, modelo_escolhido):
+    if "GOOGLE_API_KEY" not in st.secrets:
+        return "ERRO: Configure a GOOGLE_API_KEY nos Secrets."
+    
     api_key = st.secrets["GOOGLE_API_KEY"]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo_escolhido}:generateContent?key={api_key}"
     
-    # URL muda de acordo com sua escolha no menu
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
-    
+    # Prompt Organizado
     prompt = f"""
-    Crie conteúdo de marketing para nutricionista.
-    Nicho: {nicho}. Tipo: {tipo}. Valor: {preco}. Meta: {objetivo}.
+    Atue como expert em marketing para Nutricionistas.
+    Contexto: Nicho {nicho}, Atendimento {tipo}, Valor {preco}, Meta {objetivo}.
     
-    SEPARE O TEXTO EXATAMENTE ASSIM:
+    Crie 3 seções. Use EXATAMENTE estes marcadores para separar:
     
     [PARTE1]
-    3 Ideias de Posts (Título e Legenda)
+    3 Ideias de Posts (Título chamativo + Legenda curta)
     
     [PARTE2]
-    Script de Vendas para Direct e Quebra de Objeção
+    1 Script de Vendas para Direct (Respondendo "como funciona")
+    1 Script de Quebra de Objeção (Respondendo "tá caro")
     
     [PARTE3]
-    Bio do Instagram Otimizada
+    Bio do Instagram Otimizada e frase para link.
     """
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"Content-Type": "application/json"}
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=25)
         
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text']
@@ -62,46 +57,48 @@ def chamar_ia(nicho, tipo, preco, objetivo, modelo):
         else:
             return f"ERRO GOOGLE ({response.status_code}): {response.text}"
     except Exception as e:
-        return f"ERRO CONEXÃO: {e}"
+        return f"ERRO DE CONEXÃO: {e}"
 
-# 5. Login
+# 4. Login Simples
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔒 NutriVendas")
+    st.title("🔒 Login")
     senha = st.text_input("Senha", type="password")
     if st.button("Entrar"):
         if "ACCESS_PASSWORD" in st.secrets and senha == st.secrets["ACCESS_PASSWORD"]:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Senha Incorreta")
+            st.error("Senha incorreta")
     st.stop()
 
-# 6. Interface Principal
-st.title(f"🚀 NutriVendas: {modelo_escolhido}")
+# 5. Interface Principal
+st.title("🥗 NutriVendas: Modo Seguro")
+st.write("Gerador de Marketing (Visual Padrão)")
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    with st.form("meu_form"):
+    with st.form("form_principal"):
         nicho = st.text_input("Nicho", "Emagrecimento")
-        tipo = st.selectbox("Tipo", ["Online", "Presencial"])
+        tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
         preco = st.text_input("Valor", "R$ 200")
-        obj = st.selectbox("Meta", ["Agenda Cheia", "Vendas"])
-        btn = st.form_submit_button("GERAR CONTEÚDO")
+        obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
+        btn = st.form_submit_button("GERAR ESTRATÉGIA")
 
 with col2:
     if btn:
-        with st.spinner(f"🤖 A IA está escrevendo usando {modelo_escolhido}..."):
-            texto = chamar_ia(nicho, tipo, preco, obj, modelo_escolhido)
+        with st.spinner(f"Processando com {modelo}..."):
+            texto = gerar_marketing(nicho, tipo, preco, obj, modelo)
             
             if texto == "QUOTA_EXCEEDED":
-                st.error(f"⚠️ Limite atingido para o {modelo_escolhido}!")
-                st.warning("👈 Tente mudar o modelo no menu lateral (ex: de 2.0 para 1.5) e clique em Gerar de novo.")
+                st.error("⚠️ Limite atingido neste modelo!")
+                st.info("👉 Tente mudar a opção no menu lateral esquerdo.")
             elif "ERRO" in texto:
                 st.error(texto)
             else:
+                # Separação Segura
                 p1, p2, p3 = texto, "...", "..."
                 
                 if "[PARTE1]" in texto:
@@ -113,7 +110,8 @@ with col2:
                         if len(resto) > 1:
                             p3 = resto[1].strip()
                 
-                aba1, aba2, aba3 = st.tabs(["📝 Posts", "💬 Scripts", "🔗 Bio"])
-                aba1.markdown(p1)
-                aba2.markdown(p2)
-                aba3.markdown(p3)
+                # Abas Padrão (Sem estilo customizado)
+                abas = st.tabs(["📝 Conteúdo", "💰 Vendas", "🔗 Bio"])
+                abas[0].markdown(p1)
+                abas[1].markdown(p2)
+                abas[2].markdown(p3)
