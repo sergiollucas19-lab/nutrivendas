@@ -2,27 +2,19 @@ import streamlit as st
 import requests
 import json
 
-# ----------------------------
-# 1. CONFIGURAÇÃO VISUAL
-# ----------------------------
-st.set_page_config(page_title="NutriVendas", page_icon="📈", layout="wide")
+# 1. CONFIGURAÇÃO (Obrigatório ser a primeira linha do Streamlit)
+st.set_page_config(page_title="NutriVendas 2.5", page_icon="⚡", layout="wide")
 
+# 2. ESTILO
 st.markdown("""
 <style>
-    .stApp { background-color: #0E1117; color: #FFFFFF; }
-    h1, h2, h3, h4 { color: #EEEEEE !important; }
-    div.stButton > button {
-        background-color: #008000; color: white; border-radius: 8px; width: 100%; font-weight: bold;
-    }
-    .stTextInput input, .stSelectbox div, .stTextArea textarea {
-        background-color: #262730 !important; color: white !important; border-radius: 8px !important;
-    }
+    .stApp { background-color: #0E1117; color: white; }
+    div.stButton > button { background-color: #008000; color: white; border-radius: 8px; width: 100%; font-weight: bold; }
+    input, select, textarea { background-color: #262730 !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------
-# 2. SEGURANÇA (SECRETS)
-# ----------------------------
+# 3. VERIFICAÇÃO DE SEGURANÇA
 if "GOOGLE_API_KEY" not in st.secrets:
     st.error("⚠️ Configure a GOOGLE_API_KEY nos Secrets!")
     st.stop()
@@ -30,13 +22,10 @@ if "ACCESS_PASSWORD" not in st.secrets:
     st.error("⚠️ Configure a ACCESS_PASSWORD nos Secrets!")
     st.stop()
 
-# ----------------------------
-# 3. FUNÇÃO DE CONEXÃO (GEMINI 2.5)
-# ----------------------------
-def chamar_ia_direto(nicho, tipo, preco, objetivo):
+# 4. FUNÇÃO DO CÉREBRO (Conexão Direta Gemini 2.5)
+def gerar_conteudo(nicho, tipo, preco, objetivo):
     api_key = st.secrets["GOOGLE_API_KEY"]
-    
-    # ATUALIZADO: Usando o modelo que você tem acesso (Gemini 2.5 Flash)
+    # URL Direta para o modelo que confirmamos que você tem
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     headers = {"Content-Type": "application/json"}
@@ -49,7 +38,6 @@ def chamar_ia_direto(nicho, tipo, preco, objetivo):
     
     [CONTEUDO]
     - 3 Ideias de Posts (Título + Legenda)
-    - 3 Ideias de Stories
     
     [VENDAS]
     - Script de resposta para "Como funciona?"
@@ -57,89 +45,67 @@ def chamar_ia_direto(nicho, tipo, preco, objetivo):
     
     [BIO]
     - Bio otimizada
-    - Frase para Link
     """
     
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
-        
         if response.status_code == 200:
-            resultado = response.json()
-            try:
-                texto_final = resultado['candidates'][0]['content']['parts'][0]['text']
-                return texto_final
-            except:
-                return "A IA respondeu, mas não consegui ler o texto. Tente novamente."
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
         else:
-            return f"Erro no Google (Status {response.status_code}): {response.text}"
-            
+            return f"Erro Google: {response.text}"
     except Exception as e:
-        return f"Erro de conexão: {e}"
+        return f"Erro Conexão: {e}"
 
 def separar_texto(text):
     c, v, b = text, "", ""
     if "[CONTEUDO]" in text:
-        parts = text.split("[VENDAS]")
-        c = parts[0].replace("[CONTEUDO]", "").strip()
-        if len(parts) > 1:
-            sales_parts = parts[1].split("[BIO]")
-            v = sales_parts[0].strip()
-            if len(sales_parts) > 1:
-                b = sales_parts[1].strip()
+        p = text.split("[VENDAS]")
+        c = p[0].replace("[CONTEUDO]", "").strip()
+        if len(p) > 1:
+            p2 = p[1].split("[BIO]")
+            v = p2[0].strip()
+            if len(p2) > 1: b = p2[1].strip()
     return c, v, b
 
-# ----------------------------
-# 4. TELA DE LOGIN
-# ----------------------------
+# 5. TELA DE LOGIN
 if "auth" not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
-    c1, c2, c3 = st.columns([1,1,1])
-    with c2:
-        st.title("🔒 Login NutriVendas")
-        pwd = st.text_input("Senha:", type="password")
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.title("🔒 Login")
+        senha = st.text_input("Senha", type="password")
         if st.button("Entrar"):
-            if pwd == st.secrets["ACCESS_PASSWORD"]:
+            if senha == st.secrets["ACCESS_PASSWORD"]:
                 st.session_state.auth = True
                 st.rerun()
             else:
-                st.error("Senha incorreta.")
+                st.error("Senha incorreta")
     st.stop()
 
-# ----------------------------
-# 5. O APP PRINCIPAL
-# ----------------------------
-st.title("🚀 NutriVendas: IA 2.5")
-st.write("Sistema de Marketing Automático")
+# 6. APP PRINCIPAL
+st.title("⚡ NutriVendas: Gemini 2.5 Turbo")
 
-col1, col2 = st.columns([1, 2])
+c1, c2 = st.columns([1, 2])
+with c1:
+    with st.form("form"):
+        nicho = st.text_input("Nicho", "Emagrecimento")
+        tipo = st.selectbox("Atendimento", ["Online", "Presencial"])
+        preco = st.text_input("Preço", "R$ 200")
+        obj = st.selectbox("Objetivo", ["Agenda Cheia", "Vendas"])
+        btn = st.form_submit_button("GERAR ESTRATÉGIA")
 
-with col1:
-    with st.form("main_form"):
-        st.subheader("Dados do Nutri")
-        nicho = st.text_input("Nicho:", "Emagrecimento")
-        tipo = st.selectbox("Atendimento:", ["Online", "Presencial"])
-        preco = st.text_input("Preço Consulta:", "R$ 200")
-        obj = st.selectbox("Objetivo:", ["Agenda Cheia", "Vendas"])
-        btn = st.form_submit_button("GERAR AGORA ⚡")
-
-with col2:
+with c2:
     if btn:
-        with st.spinner("⚡ Usando Gemini 2.5 Flash..."):
-            texto_bruto = chamar_ia_direto(nicho, tipo, preco, obj)
-            
-            if "Erro" in texto_bruto:
-                st.error(texto_bruto)
+        with st.spinner("Conectando ao Gemini 2.5..."):
+            res = gerar_conteudo(nicho, tipo, preco, obj)
+            if "Erro" in res:
+                st.error(res)
             else:
-                conteudo, vendas, bio = separar_texto(texto_bruto)
-                
-                t1, t2, t3 = st.tabs(["📲 Conteúdo", "💰 Scripts", "🔗 Bio"])
-                t1.markdown(conteudo)
-                t2.markdown(vendas)
-                t3.markdown(bio)
+                c, v, b = separar_texto(res)
+                t1, t2, t3 = st.tabs(["Conteúdo", "Vendas", "Bio"])
+                t1.markdown(c)
+                t2.markdown(v)
+                t3.markdown(b)
