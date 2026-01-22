@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import uuid
 import time
+import json
 
 # ================= CONFIG =================
 st.set_page_config(page_title="NutriVendas Weekly", page_icon="💎", layout="wide")
@@ -22,62 +23,18 @@ with st.sidebar:
     st.header("⚙️ Painel de Controle")
     modelo = st.selectbox("Motor de IA:", ["gemini-2.5-flash", "gemini-1.5-flash"])
     semana = st.selectbox("Pacote:", ["Semana 1", "Semana 2", "Semana 3", "Semana 4"])
-    debug_mode = st.toggle("🔎 Debug (mostrar bruto)", value=False)
+    debug_mode = st.toggle("🔎 Debug (ver bruto/JSON)", value=False)
     st.divider()
     st.success("💎 Status: VIP Ativo")
 
 # ================= HELPERS =================
-PARTES = ["PARTE1","PARTE2","PARTE3","PARTE4","PARTE5","PARTE6"]
-
 def limpar_texto(texto):
     if not isinstance(texto, str):
         texto = str(texto)
     return texto.replace("\x00", "").replace("$", " reais ")
 
-def cortar(texto, max_chars=28000):
-    if len(texto) > max_chars:
-        return texto[:max_chars] + "\n\n[conteúdo cortado para evitar travamento]"
-    return texto
-
-def split_partes_robusto(texto):
-    """
-    Split robusto por tags na ordem.
-    Se alguma tag não vier, deixa vazio e a UI preenche com aviso.
-    """
-    out = {k: "" for k in PARTES}
-    if not isinstance(texto, str) or not texto.strip():
-        return out
-
-    # encontra posições das tags que existem
-    tags = []
-    for k in PARTES:
-        tag = f"[{k}]"
-        idx = texto.find(tag)
-        if idx != -1:
-            tags.append((idx, k, tag))
-    tags.sort()
-
-    # se não veio tag nenhuma, joga tudo na PARTE1 pra você ver e não parecer "vazio"
-    if not tags:
-        out["PARTE1"] = texto.strip()
-        return out
-
-    # recorta cada bloco
-    for i, (idx, k, tag) in enumerate(tags):
-        start = idx + len(tag)
-        end = len(texto) if i == len(tags)-1 else tags[i+1][0]
-        out[k] = texto[start:end].strip()
-
-    return out
-
-def merge_dict(a, b):
-    out = {}
-    out.update(a or {})
-    out.update(b or {})
-    return out
-
-# ================= GEMINI =================
-def chamar_gemini(prompt, modelo_escolhido, max_output_tokens=1400, timeout_segundos=120, max_tentativas=3):
+def call_gemini_text(prompt, modelo_escolhido, max_output_tokens=2000, timeout_segundos=120, max_tentativas=3):
+    """Chama Gemini e retorna texto. Com retry/backoff."""
     if "GOOGLE_API_KEY" not in st.secrets:
         return {"ok": False, "error": "GOOGLE_API_KEY não configurada no st.secrets."}
 
@@ -87,7 +44,7 @@ def chamar_gemini(prompt, modelo_escolhido, max_output_tokens=1400, timeout_segu
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.7,
+            "temperature": 0.6,
             "maxOutputTokens": int(max_output_tokens)
         }
     }
@@ -96,9 +53,8 @@ def chamar_gemini(prompt, modelo_escolhido, max_output_tokens=1400, timeout_segu
     for tentativa in range(1, max_tentativas + 1):
         try:
             r = requests.post(url, json=payload, timeout=timeout_segundos)
-
             if r.status_code != 200:
-                # tenta de novo em erros temporários
+                # erros temporários
                 if r.status_code in (429, 500, 503):
                     time.sleep(2 ** (tentativa - 1))
                     continue
@@ -107,11 +63,11 @@ def chamar_gemini(prompt, modelo_escolhido, max_output_tokens=1400, timeout_segu
             data = r.json()
             candidates = data.get("candidates", [])
             if not candidates:
-                return {"ok": False, "error": f"Resposta sem candidates. Retorno: {data}"}
+                return {"ok": False, "error": f"Sem candidates. Retorno: {data}"}
 
             parts = candidates[0].get("content", {}).get("parts", [])
             if not parts or "text" not in parts[0]:
-                return {"ok": False, "error": f"Resposta sem texto. Retorno: {data}"}
+                return {"ok": False, "error": f"Sem texto. Retorno: {data}"}
 
             return {"ok": True, "text": parts[0]["text"]}
 
@@ -124,11 +80,127 @@ def chamar_gemini(prompt, modelo_escolhido, max_output_tokens=1400, timeout_segu
 
     return {"ok": False, "error": f"Timeout/instabilidade após {max_tentativas} tentativas: {last_err}"}
 
-# ================= PROMPTS (2 CHAMADAS LEVES) =================
-def prompt_parte1_3(nicho, tipo, preco, objetivo, semana):
+def extract_json_block(s: str):
+    """Extrai o primeiro bloco JSON { ... } do texto (se o modelo embrulhar com texto)."""
+    if not s:
+        return None
+    s = s.strip()
+
+    # se já é json puro
+    if s.startswith("{") and s.endswith("}"):
+        return s
+
+    # tenta achar o primeiro { e o último }
+    first = s.find("{")
+    last = s.rfind("}")
+    if first != -1 and last != -1 and last > first:
+        return s[first:last+1]
+    return None
+
+def safe_json_loads(maybe_json: str):
+    try:
+        return json.loads(maybe_json)
+    except:
+        return None
+
+def format_carrossel_text(car):
+    """Transforma um carrossel (dict) em texto pronto pra copiar."""
+    tema = car.get("tema","").strip()
+    capa = car.get("capa","").strip()
+    slides = car.get("slides", []) or []
+    imagens = car.get("imagens", []) or []
+    legenda = car.get("legenda","").strip()
+    cta = car.get("cta","").strip()
+    hashtags = car.get("hashtags", []) or []
+
+    out = []
+    out.append(f"TEMA: {tema}")
+    out.append(f"CAPA: {capa}")
+    out.append("")
+    for i, txt in enumerate(slides, start=1):
+        out.append(f"SLIDE {i}: {txt}")
+        if i-1 < len(imagens):
+            out.append(f"  (Imagem sugerida: {imagens[i-1]})")
+    out.append("")
+    out.append("LEGENDA (copiar e colar):")
+    out.append(legenda)
+    out.append("")
+    out.append(f"CTA: {cta}")
+    out.append("")
+    out.append("HASHTAGS:")
+    out.append(" ".join(hashtags))
+    return "\n".join(out).strip()
+
+def dict_to_text_posicionamento(d):
+    return "\n".join([
+        f"Promessa: {d.get('promessa','')}",
+        f"Público ideal: {d.get('publico','')}",
+        f"CTA padrão: {d.get('cta','')}"
+    ]).strip()
+
+def dict_to_text_bio(d):
+    bios = d.get("bios", []) or []
+    destaques = d.get("destaques", []) or []
+    link = d.get("link_bio","")
+    out = []
+    out.append("BIOS:")
+    for i,b in enumerate(bios, start=1):
+        out.append(f"{i}) {b}")
+    out.append("")
+    out.append(f"Link na bio: {link}")
+    out.append("")
+    out.append("Destaques (nome → conteúdo):")
+    for item in destaques:
+        # item pode vir como dict ou string
+        if isinstance(item, dict):
+            out.append(f"- {item.get('nome','')}: {', '.join(item.get('conteudo',[]) or [])}")
+        else:
+            out.append(f"- {item}")
+    return "\n".join(out).strip()
+
+def calendario_to_text(lst):
+    out = []
+    for it in lst or []:
+        # it esperado: {dia, formato, objetivo, cta}
+        out.append(f"{it.get('dia','Dia')}: {it.get('formato','')} | {it.get('objetivo','')} | CTA: {it.get('cta','')}")
+    return "\n".join(out).strip()
+
+def reels_to_text(lst):
+    out = []
+    for i,it in enumerate(lst or [], start=1):
+        out.append(f"REELS {i} — Tema: {it.get('tema','')}")
+        out.append(f"Hook: {it.get('hook','')}")
+        falar = it.get("falar", []) or []
+        mostrar = it.get("mostrar", []) or []
+        out.append("O que falar:")
+        for b in falar:
+            out.append(f"- {b}")
+        out.append("O que mostrar:")
+        for b in mostrar:
+            out.append(f"- {b}")
+        out.append(f"Duração: {it.get('duracao','')}")
+        out.append("")
+    return "\n".join(out).strip()
+
+def stories_to_text(lst):
+    out = []
+    for i,it in enumerate(lst or [], start=1):
+        out.append(f"SEQUÊNCIA {i}: {it.get('tema','')}")
+        seq = it.get("sequencia", []) or []
+        for j,s in enumerate(seq, start=1):
+            out.append(f"Story {j}: {s.get('texto','')}")
+            out.append(f"  Sticker: {s.get('sticker','')}")
+        out.append(f"CTA: {it.get('cta','')}")
+        out.append("")
+    return "\n".join(out).strip()
+
+# ================= PROMPTS =================
+def build_prompt_weekly_json(nicho, tipo, preco, objetivo, semana):
     return f"""
-Você é um estrategista de marketing para nutricionistas.
-Gere um PACOTE SEMANAL PRONTO PARA POSTAR (curto, direto, sem enrolação).
+Você é um especialista em marketing para nutricionistas.
+
+Gere UM PACOTE SEMANAL para Instagram com foco em "COPIAR E POSTAR" (texto pronto).
+Reels e Stories devem ser APENAS IDEIAS (não roteiros completos).
 
 DADOS:
 - Nicho: {nicho}
@@ -137,74 +209,138 @@ DADOS:
 - Objetivo: {objetivo}
 - Semana: {semana}
 
-REGRAS IMPORTANTES:
-- Português (Brasil).
-- SEM tabelas.
-- Seção curta: no máximo 8 linhas por seção.
-- Você DEVE imprimir TODAS as tags [PARTE1], [PARTE2], [PARTE3] mesmo que alguma fique breve.
-- Não pare no meio da resposta.
+REGRAS IMPORTANTES (OBRIGATÓRIAS):
+- Responda SOMENTE com JSON válido. Sem markdown. Sem texto fora do JSON.
+- Use exatamente as chaves abaixo.
+- Carrosséis: 3 carrosséis.
+- Cada carrossel: 7 slides com texto FINAL (curto, direto, pronto).
+- Cada slide: máximo ~120 caracteres (para caber em arte).
+- Sugira "imagens" como descrição do que colocar no slide (foto/ícone/ilustração).
+- Legenda: pronta para copiar e colar (curta, até ~700 caracteres).
+- Hashtags: 10 hashtags.
 
-FORMATO OBRIGATÓRIO:
-
-[PARTE1]
-(POSICIONAMENTO) Promessa clara (1 frase) + Público ideal (1 frase) + CTA padrão (1 frase)
-
-[PARTE2]
-(BIO) 2 bios prontas (até 150 caracteres) + 1 frase para link da bio + 5 destaques (nome + 3 itens do que vai dentro)
-
-[PARTE3]
-(CALENDÁRIO 7 DIAS) Dia 1 a Dia 7: formato (Carrossel/Reels/Stories), objetivo e CTA
+ESQUEMA JSON (use exatamente):
+{{
+  "posicionamento": {{
+    "promessa": "…",
+    "publico": "…",
+    "cta": "…"
+  }},
+  "bio": {{
+    "bios": ["…", "…"],
+    "link_bio": "…",
+    "destaques": [
+      {{"nome":"…","conteudo":["…","…","…"]}},
+      {{"nome":"…","conteudo":["…","…","…"]}},
+      {{"nome":"…","conteudo":["…","…","…"]}},
+      {{"nome":"…","conteudo":["…","…","…"]}},
+      {{"nome":"…","conteudo":["…","…","…"]}}
+    ]
+  }},
+  "calendario": [
+    {{"dia":"Dia 1","formato":"Carrossel","objetivo":"…","cta":"…"}},
+    {{"dia":"Dia 2","formato":"Stories","objetivo":"…","cta":"…"}},
+    {{"dia":"Dia 3","formato":"Reels","objetivo":"…","cta":"…"}},
+    {{"dia":"Dia 4","formato":"Carrossel","objetivo":"…","cta":"…"}},
+    {{"dia":"Dia 5","formato":"Stories","objetivo":"…","cta":"…"}},
+    {{"dia":"Dia 6","formato":"Carrossel","objetivo":"…","cta":"…"}},
+    {{"dia":"Dia 7","formato":"Stories","objetivo":"…","cta":"…"}}
+  ],
+  "carrosseis": [
+    {{
+      "tema":"…",
+      "capa":"…",
+      "slides":["…","…","…","…","…","…","…"],
+      "imagens":["…","…","…","…","…","…","…"],
+      "legenda":"…",
+      "cta":"…",
+      "hashtags":["#…","#…","#…","#…","#…","#…","#…","#…","#…","#…"]
+    }},
+    {{
+      "tema":"…",
+      "capa":"…",
+      "slides":["…","…","…","…","…","…","…"],
+      "imagens":["…","…","…","…","…","…","…"],
+      "legenda":"…",
+      "cta":"…",
+      "hashtags":["#…","#…","#…","#…","#…","#…","#…","#…","#…","#…"]
+    }},
+    {{
+      "tema":"…",
+      "capa":"…",
+      "slides":["…","…","…","…","…","…","…"],
+      "imagens":["…","…","…","…","…","…","…"],
+      "legenda":"…",
+      "cta":"…",
+      "hashtags":["#…","#…","#…","#…","#…","#…","#…","#…","#…","#…"]
+    }}
+  ],
+  "reels_ideias": [
+    {{"tema":"…","hook":"…","falar":["…","…","…"],"mostrar":["…","…"],"duracao":"15-25s"}},
+    {{"tema":"…","hook":"…","falar":["…","…","…"],"mostrar":["…","…"],"duracao":"15-25s"}},
+    {{"tema":"…","hook":"…","falar":["…","…","…"],"mostrar":["…","…"],"duracao":"15-25s"}},
+    {{"tema":"…","hook":"…","falar":["…","…","…"],"mostrar":["…","…"],"duracao":"15-25s"}},
+    {{"tema":"…","hook":"…","falar":["…","…","…"],"mostrar":["…","…"],"duracao":"15-25s"}}
+  ],
+  "stories_ideias": [
+    {{
+      "tema":"…",
+      "sequencia":[
+        {{"texto":"…","sticker":"Enquete"}},
+        {{"texto":"…","sticker":"Caixinha"}},
+        {{"texto":"…","sticker":"Pergunta"}}
+      ],
+      "cta":"…"
+    }},
+    {{
+      "tema":"…",
+      "sequencia":[
+        {{"texto":"…","sticker":"Quiz"}},
+        {{"texto":"…","sticker":"Enquete"}},
+        {{"texto":"…","sticker":"Caixinha"}}
+      ],
+      "cta":"…"
+    }},
+    {{
+      "tema":"…",
+      "sequencia":[
+        {{"texto":"…","sticker":"Enquete"}},
+        {{"texto":"…","sticker":"Quiz"}},
+        {{"texto":"…","sticker":"Caixinha"}}
+      ],
+      "cta":"…"
+    }},
+    {{
+      "tema":"…",
+      "sequencia":[
+        {{"texto":"…","sticker":"Enquete"}},
+        {{"texto":"…","sticker":"Pergunta"}},
+        {{"texto":"…","sticker":"Caixinha"}}
+      ],
+      "cta":"…"
+    }},
+    {{
+      "tema":"…",
+      "sequencia":[
+        {{"texto":"…","sticker":"Quiz"}},
+        {{"texto":"…","sticker":"Enquete"}},
+        {{"texto":"…","sticker":"Pergunta"}}
+      ],
+      "cta":"…"
+    }}
+  ]
+}}
 """
 
-def prompt_parte4_6(nicho, tipo, preco, objetivo, semana):
+def build_prompt_repair_json(bad_text):
     return f"""
-Você é um estrategista de conteúdo para Instagram de nutricionistas.
-Gere um PACOTE SEMANAL PRONTO PARA POSTAR com foco em POSTS DE IMAGEM (carrossel).
-Reels e Stories devem ser APENAS IDEIAS (rápidas).
+Conserte o conteúdo abaixo para virar SOMENTE um JSON válido, seguindo este esquema:
+- Deve conter: posicionamento, bio, calendario, carrosseis (3), reels_ideias (5), stories_ideias (5).
+- Não invente texto fora do JSON.
+- Se faltar algo, complete.
 
-DADOS:
-- Nicho: {nicho}
-- Atendimento: {tipo}
-- Preço: {preco}
-- Objetivo: {objetivo}
-- Semana: {semana}
-
-REGRAS IMPORTANTES:
-- Português (Brasil).
-- SEM tabelas.
-- Você DEVE imprimir TODAS as tags [PARTE4], [PARTE5], [PARTE6].
-- Não faça Reels prontos (só ideias).
-- Não faça Stories prontos longos (só sequência curta).
-- Carrosséis: 3 carrosséis por semana (mais rápido e sempre entrega).
-- Cada carrossel com 7 slides (texto exato). Slides curtos.
-
-FORMATO OBRIGATÓRIO:
-
-[PARTE4]
-(3 CARROSSÉIS PRONTOS)
-Carrossel 1:
-- Capa:
-- Slide 2:
-- Slide 3:
-- Slide 4:
-- Slide 5:
-- Slide 6:
-- Slide 7 (CTA):
-- Sugestão de imagem por slide (1 linha)
-- Legenda pronta (curta)
-- CTA final (1 frase)
-- 10 hashtags
-
-Carrossel 2: (mesma estrutura)
-Carrossel 3: (mesma estrutura)
-
-[PARTE5]
-(IDEIAS DE REELS – 5)
-Para cada ideia: Tema + Hook + O que falar (3 bullets) + O que mostrar (2 bullets) + Duração sugerida
-
-[PARTE6]
-(IDEIAS DE STORIES – 5 sequências)
-Para cada sequência: Story 1/2/3 (texto curto) + sticker sugerido + CTA
+CONTEÚDO PARA CONSERTAR:
+{bad_text}
 """
 
 # ================= LOGIN =================
@@ -228,16 +364,14 @@ if not st.session_state.auth:
 
 # ================= APP =================
 st.title("💎 NutriVendas Weekly")
-st.write("Conteúdo profissional para nutricionistas (rápido, estável e vendável).")
+st.write("Pacote semanal: carrosséis prontos (texto por slide) + ideias de Reels/Stories.")
 
 if "resultado" not in st.session_state:
     st.session_state.resultado = None
 if "rodada" not in st.session_state:
     st.session_state.rodada = str(uuid.uuid4())
-if "raw1" not in st.session_state:
-    st.session_state.raw1 = ""
-if "raw2" not in st.session_state:
-    st.session_state.raw2 = ""
+if "raw" not in st.session_state:
+    st.session_state.raw = ""
 
 col1, col2 = st.columns([1, 2])
 
@@ -251,89 +385,94 @@ with col1:
         gerar = st.form_submit_button("GERAR PACOTE SEMANAL")
 
 if gerar:
-    # Chamada 1 (leve)
-    with st.spinner("Gerando (1/2) Posicionamento, Bio e Semana..."):
-        resp1 = chamar_gemini(
-            prompt_parte1_3(nicho, tipo, preco, objetivo, semana),
-            modelo_escolhido=modelo,
-            max_output_tokens=1100,
-            timeout_segundos=120,
-            max_tentativas=3
-        )
+    with st.spinner("Gerando pacote semanal (JSON)..."):
+        prompt = build_prompt_weekly_json(nicho, tipo, preco, objetivo, semana)
+        resp = call_gemini_text(prompt, modelo, max_output_tokens=2300, timeout_segundos=120, max_tentativas=3)
 
-    if not resp1["ok"]:
-        st.session_state.resultado = {"erro": resp1["error"]}
+    if not resp["ok"]:
+        st.session_state.resultado = {"erro": resp["error"]}
         st.session_state.rodada = str(uuid.uuid4())
         st.rerun()
 
-    # Chamada 2 (leve)
-    with st.spinner("Gerando (2/2) Carrosséis + Ideias de Reels/Stories..."):
-        resp2 = chamar_gemini(
-            prompt_parte4_6(nicho, tipo, preco, objetivo, semana),
-            modelo_escolhido=modelo,
-            max_output_tokens=1600,
-            timeout_segundos=120,
-            max_tentativas=3
-        )
+    raw = limpar_texto(resp["text"])
+    st.session_state.raw = raw
 
-    if not resp2["ok"]:
-        st.session_state.resultado = {"erro": resp2["error"]}
+    # tenta extrair/parsear JSON
+    block = extract_json_block(raw)
+    data = safe_json_loads(block) if block else None
+
+    # se falhar, tenta "reparar" automaticamente
+    if data is None:
+        with st.spinner("Consertando formato (JSON inválido)..."):
+            fix = call_gemini_text(build_prompt_repair_json(raw), modelo, max_output_tokens=2300, timeout_segundos=120, max_tentativas=3)
+        if not fix["ok"]:
+            st.session_state.resultado = {"erro": "JSON inválido e não foi possível corrigir. Veja Debug."}
+            st.session_state.rodada = str(uuid.uuid4())
+            st.rerun()
+        fixed_raw = limpar_texto(fix["text"])
+        st.session_state.raw = fixed_raw
+        block2 = extract_json_block(fixed_raw)
+        data = safe_json_loads(block2) if block2 else None
+
+    if data is None:
+        st.session_state.resultado = {"erro": "Ainda não consegui transformar em JSON válido. Ative Debug pra ver o bruto."}
         st.session_state.rodada = str(uuid.uuid4())
         st.rerun()
 
-    raw1 = cortar(limpar_texto(resp1["text"]), 26000)
-    raw2 = cortar(limpar_texto(resp2["text"]), 26000)
-
-    st.session_state.raw1 = raw1
-    st.session_state.raw2 = raw2
-
-    p13 = split_partes_robusto(raw1)  # pega PARTE1..3 (mas robusto se vier sem tags)
-    p46 = split_partes_robusto(raw2)  # pega PARTE4..6
-
-    resultado = merge_dict(p13, p46)
-
-    # garante todas as partes existirem (pra não ficar abas vazias)
-    for k in PARTES:
-        if not resultado.get(k, "").strip():
-            resultado[k] = "⚠️ O Gemini não retornou esta parte. Clique em GERAR novamente (instabilidade)."
-
-    st.session_state.resultado = resultado
+    st.session_state.resultado = data
     st.session_state.rodada = str(uuid.uuid4())
     st.rerun()
 
 # ================= UI =================
 with col2:
-    res = st.session_state.resultado
     rodada = st.session_state.rodada
+    res = st.session_state.resultado
 
-    nomes_abas = ["🎯 Posicionamento","🔗 Bio","📅 Semana","🖼️ Carrosséis","🎬 Reels (ideias)","📲 Stories (ideias)"]
+    tabs_names = ["🎯 Posicionamento", "🔗 Bio", "📅 Semana", "🖼️ Carrosséis", "🎬 Reels (ideias)", "📲 Stories (ideias)"]
     if debug_mode:
-        nomes_abas.append("🔎 Debug")
+        tabs_names.append("🔎 Debug")
 
-    abas = st.tabs(nomes_abas)
+    abas = st.tabs(tabs_names)
 
     if res is None:
         with abas[0]:
             st.info("Preencha à esquerda e clique em **GERAR PACOTE SEMANAL**.")
-    elif "erro" in res:
+    elif isinstance(res, dict) and "erro" in res:
         with abas[0]:
             st.error(res["erro"])
     else:
-        mapa = [
-            ("PARTE1",0),
-            ("PARTE2",1),
-            ("PARTE3",2),
-            ("PARTE4",3),
-            ("PARTE5",4),
-            ("PARTE6",5),
-        ]
-        for k,i in mapa:
-            with abas[i]:
-                st.text_area("Copiar e colar:", value=res.get(k,""), height=650, key=f"{k}_{rodada}")
+        # Posicionamento
+        with abas[0]:
+            st.text_area("Copiar e colar:", value=dict_to_text_posicionamento(res.get("posicionamento", {})), height=280, key=f"pos_{rodada}")
+
+        # Bio
+        with abas[1]:
+            st.text_area("Copiar e colar:", value=dict_to_text_bio(res.get("bio", {})), height=430, key=f"bio_{rodada}")
+
+        # Semana
+        with abas[2]:
+            st.text_area("Copiar e colar:", value=calendario_to_text(res.get("calendario", [])), height=430, key=f"cal_{rodada}")
+
+        # Carrosséis
+        with abas[3]:
+            cars = res.get("carrosseis", []) or []
+            if not cars:
+                st.warning("Sem carrosséis retornados.")
+            else:
+                for idx, car in enumerate(cars, start=1):
+                    st.subheader(f"Carrossel {idx}")
+                    st.text_area("Copiar e colar:", value=format_carrossel_text(car), height=520, key=f"car_{idx}_{rodada}")
+                    st.divider()
+
+        # Reels (ideias)
+        with abas[4]:
+            st.text_area("Copiar e colar:", value=reels_to_text(res.get("reels_ideias", [])), height=650, key=f"reels_{rodada}")
+
+        # Stories (ideias)
+        with abas[5]:
+            st.text_area("Copiar e colar:", value=stories_to_text(res.get("stories_ideias", [])), height=650, key=f"stories_{rodada}")
 
         if debug_mode:
             with abas[-1]:
-                st.markdown("### Resposta bruta 1 (PARTE1–3)")
-                st.text_area("RAW1", value=st.session_state.raw1, height=260, key=f"raw1_{rodada}")
-                st.markdown("### Resposta bruta 2 (PARTE4–6)")
-                st.text_area("RAW2", value=st.session_state.raw2, height=260, key=f"raw2_{rodada}")
+                st.markdown("### Texto bruto retornado / JSON")
+                st.text_area("RAW", value=st.session_state.raw, height=650, key=f"raw_{rodada}")
