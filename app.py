@@ -13,6 +13,14 @@ PRIMARY_MODEL_OPTIONS = ["gemini-2.5-flash", "gemini-1.5-flash"]
 
 st.set_page_config(page_title=APP_NAME, page_icon="💎", layout="wide")
 
+# Debug seguro (evita NameError)
+if "debug_mode" not in st.session_state:
+    st.session_state.debug_mode = False
+debug_mode = st.session_state.debug_mode
+
+# =========================
+# CSS
+# =========================
 st.markdown("""
 <style>
 .stApp { background-color:#000000; color:#E0E0E0; }
@@ -50,7 +58,6 @@ HASHTAGS = {
 
 def pick_hashtags(nicho: str):
     base = HASHTAGS.get(nicho, HASHTAGS["Nutrição"])
-    # embaralha sem repetir
     base2 = base[:]
     random.shuffle(base2)
     return base2[:10]
@@ -60,7 +67,7 @@ def pick_hashtags(nicho: str):
 # =========================
 def call_gemini(prompt, model, max_output_tokens=420, timeout=60, retries=3):
     """
-    AQUI A MÁGICA: respostas curtas e estruturadas -> não corta.
+    Resposta curta e estruturada -> não corta.
     """
     if "GOOGLE_API_KEY" not in st.secrets:
         return {"ok": False, "error": "Configure GOOGLE_API_KEY em Settings > Secrets."}
@@ -117,7 +124,6 @@ CAROUSEL_TEMPLATE = [
     "SLIDE 7 (CTA)\n{cta}"
 ]
 
-# Fixos (não dependem da IA)
 FIXOS = {
     "dor": "Você tenta fazer tudo certo, mas trava no emocional e perde a constância.",
     "autoridade": "Não é falta de força de vontade. É estratégia nutricional + ambiente.",
@@ -125,11 +131,11 @@ FIXOS = {
 }
 
 # =========================
-# PROMPTS CURTOS (IA SÓ PREENCHE)
+# PROMPT CURTO (IA SÓ PREENCHE)
 # =========================
 def build_prompt_fill(nicho, publico, tema):
     return f"""
-Você é um nutricionista e estrategista de marketing.
+Você é um nutricionista e estrategista de marketing no Instagram.
 Preencha os campos abaixo com respostas CURTAS, PRÁTICAS e POSTÁVEIS.
 
 Contexto:
@@ -139,7 +145,7 @@ Contexto:
 
 Regras:
 - Sem texto extra fora do formato.
-- Cada linha deve ter no máximo ~120 caracteres.
+- Cada linha até ~120 caracteres.
 - Linguagem simples, profissional e direta.
 
 FORMATO OBRIGATÓRIO:
@@ -159,9 +165,6 @@ STORIES_3:
 # BUILD OUTPUTS
 # =========================
 def parse_kv(text):
-    """
-    Lê linhas tipo "CHAVE: valor" e devolve dict.
-    """
     out = {}
     for line in text.splitlines():
         if ":" in line:
@@ -170,10 +173,10 @@ def parse_kv(text):
     return out
 
 def build_carousel(kv):
-    capa = kv.get("CAPA", "3 ajustes simples para emagrecer sem travar no emocional")
-    explicacao = kv.get("EXPLICACAO", "Constância vence intensidade: estabilize fome, rotina e sono para aderir ao plano.")
-    dica1 = kv.get("DICA1", "Monte prato base: proteína + fibra + carbo do bem. Isso reduz compulsão e beliscar.")
-    dica2 = kv.get("DICA2", "Planeje 1 lanche âncora. Se a ansiedade bater, você já tem opção pronta.")
+    capa = kv.get("CAPA", "3 ajustes para ganhar massa sem travar no emocional")
+    explicacao = kv.get("EXPLICACAO", "Constância vem de rotina simples: proteína + fibra + sono. Sem isso, você volta pro 8 ou 80.")
+    dica1 = kv.get("DICA1", "Pré-treino: proteína + carbo simples (ex: iogurte + banana). Evita queda de energia e belisco.")
+    dica2 = kv.get("DICA2", "Lanche âncora: escolha 1 opção fixa p/ ansiedade (ex: fruta + castanhas). Menos decisão = mais constância.")
     dor = FIXOS["dor"]
     autoridade = FIXOS["autoridade"]
     cta = FIXOS["cta"]
@@ -188,22 +191,21 @@ def build_carousel(kv):
         CAROUSEL_TEMPLATE[6].format(cta=cta),
     ])
 
-    # imagens sugeridas (fixas + um toque do tema)
     imagens = "\n".join([
         "IMAGENS SUGERIDAS:",
-        "Slide 1: fundo preto + título dourado + ícone (balança/halter/prato)",
-        "Slide 2: foto de pessoa pensativa + texto grande",
-        "Slide 3: gráfico simples/ícone cérebro + prato",
-        "Slide 4: jaleco / consultório / checklist",
-        "Slide 5: prato montado (proteína+fibra+carbo)",
-        "Slide 6: lanche prático (iogurte+fruta / sanduíche integral / castanhas)",
-        "Slide 7: CTA com botão 'SALVAR' + ícone direct"
+        "Slide 1: fundo preto + título dourado + ícone (halter/prato)",
+        "Slide 2: pessoa pensativa + fundo escuro",
+        "Slide 3: ícone cérebro + prato simples",
+        "Slide 4: jaleco/checklist/consultório",
+        "Slide 5: prato montado (proteína+carbo+fibra)",
+        "Slide 6: lanche prático (iogurte/fruta/castanhas)",
+        "Slide 7: CTA com ícone 'Salvar' + Direct"
     ])
 
     return slides + "\n\n" + imagens
 
 def build_caption(kv, nicho):
-    mini = kv.get("MINI_EXPANSAO", "O segredo é reduzir decisão diária: rotina simples, comida previsível e um plano que caiba na vida.")
+    mini = kv.get("MINI_EXPANSAO", "O segredo é reduzir decisões: rotina simples, comida previsível e um plano que caiba na vida.")
     hashtags = " ".join(pick_hashtags(nicho))
 
     caption = (
@@ -217,12 +219,12 @@ def build_caption(kv, nicho):
 
 def build_reels(kv):
     hook = kv.get("REELS_HOOK", "Quando a ansiedade bate e a fome emocional aparece…")
-    cenas = kv.get("REELS_CENAS", "1) close no rosto 2s | 2) prato simples | 3) texto na tela | 4) você aponta 3 dicas")
+    cenas = kv.get("REELS_CENAS", "1) close no rosto 2s | 2) prato simples | 3) texto na tela | 4) você aponta 2 dicas")
     return (
         "REELS (direção — fácil de gravar)\n"
         f"Hook (texto na tela): {hook}\n"
         f"Cenas (rápido): {cenas}\n"
-        "Fala (curta): “Não é falta de disciplina. É estratégia. Salva esse vídeo e me chama se quiser plano.”\n"
+        "Fala (curta): “Não é falta de disciplina. É estratégia. Salva e me chama se quiser um plano.”\n"
         "Duração: 7–12s\n"
     )
 
@@ -261,14 +263,18 @@ if not st.session_state.auth:
     st.stop()
 
 # =========================
+# SIDEBAR (toggle debug com session_state)
+# =========================
+with st.sidebar:
+    st.markdown("---")
+    st.session_state.debug_mode = st.toggle("🔎 Debug", value=st.session_state.debug_mode)
+    debug_mode = st.session_state.debug_mode
+
+# =========================
 # UI
 # =========================
 st.title(f"💎 {APP_NAME}")
 st.write(APP_TAGLINE)
-
-with st.sidebar:
-    st.markdown("---")
-    st.caption("Padrão agência: templates fixos + IA preenchendo poucas partes (sem cortes).")
 
 if "rodada" not in st.session_state:
     st.session_state.rodada = str(uuid.uuid4())
@@ -285,14 +291,14 @@ with col1:
         nicho = st.selectbox("Nicho", ["Emagrecimento", "Hipertrofia", "Nutrição", "SOP"])
         publico = st.text_input("Público", "Mulheres 25–40 com ansiedade e compulsão")
         tema = st.text_input("Tema do conteúdo", "Hipertrofia com ansiedade (constância)")
-        modelo = st.selectbox("Modelo", PRIMARY_MODEL_OPTIONS)
+        modelo_escolhido = st.selectbox("Modelo (IA)", PRIMARY_MODEL_OPTIONS)
         gerar = st.form_submit_button("GERAR CONTEÚDO")
 
 if gerar:
     prompt = build_prompt_fill(nicho, publico, tema)
 
-    with st.spinner("Gerando preenchimentos (IA)…"):
-        resp = call_gemini(prompt, modelo, max_output_tokens=420, timeout=60, retries=3)
+    with st.spinner("Gerando conteúdo (preenchimentos curtos)…"):
+        resp = call_gemini(prompt, modelo_escolhido, max_output_tokens=420, timeout=60, retries=3)
 
     if not resp["ok"]:
         st.session_state.out_car = "ERRO: " + resp["error"]
