@@ -4,8 +4,8 @@ import uuid
 import time
 
 # ================= CONFIG =================
-APP_NAME = "NutriGrowth Studio"  # <- nome do SaaS (mude se quiser)
-APP_TAGLINE = "Conteúdo pronto para nutricionistas crescerem no Instagram."
+APP_NAME = "NutriGrowth Studio"
+APP_TAGLINE = "Conteúdo pronto e consistente para nutricionistas crescerem no Instagram."
 
 st.set_page_config(page_title=APP_NAME, page_icon="💎", layout="wide")
 
@@ -32,13 +32,9 @@ with st.sidebar:
 def limpar_texto(texto):
     if not isinstance(texto, str):
         texto = str(texto)
-    return texto.replace("\x00", "").replace("$", " reais ")
+    return texto.replace("\x00", "").replace("$", " reais ").strip()
 
-def call_gemini(prompt, modelo_escolhido, max_output_tokens=900, timeout_segundos=90, max_tentativas=3):
-    """
-    Chamada robusta com retry/backoff.
-    Mantém respostas curtas para evitar corte.
-    """
+def call_gemini(prompt, modelo_escolhido, max_output_tokens=900, timeout_segundos=120, max_tentativas=3):
     if "GOOGLE_API_KEY" not in st.secrets:
         return {"ok": False, "error": "GOOGLE_API_KEY não configurada no st.secrets."}
 
@@ -49,7 +45,7 @@ def call_gemini(prompt, modelo_escolhido, max_output_tokens=900, timeout_segundo
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.65,
-            "maxOutputTokens": int(max_output_tokens)
+            "maxOutputTokens": int(max_output_tokens),
         }
     }
 
@@ -57,8 +53,8 @@ def call_gemini(prompt, modelo_escolhido, max_output_tokens=900, timeout_segundo
     for tentativa in range(1, max_tentativas + 1):
         try:
             r = requests.post(url, json=payload, timeout=timeout_segundos)
+
             if r.status_code != 200:
-                # retry em erros temporários
                 if r.status_code in (429, 500, 503):
                     time.sleep(2 ** (tentativa - 1))
                     continue
@@ -69,11 +65,14 @@ def call_gemini(prompt, modelo_escolhido, max_output_tokens=900, timeout_segundo
             if not candidates:
                 return {"ok": False, "error": f"Sem candidates. Retorno: {data}"}
 
-            parts = candidates[0].get("content", {}).get("parts", [])
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
             if not parts or "text" not in parts[0]:
                 return {"ok": False, "error": f"Sem texto. Retorno: {data}"}
 
-            return {"ok": True, "text": parts[0]["text"]}
+            text = parts[0]["text"]
+            finish = candidates[0].get("finishReason", "")  # ex: "MAX_TOKENS"
+            return {"ok": True, "text": limpar_texto(text), "finish_reason": finish}
 
         except requests.exceptions.ReadTimeout as e:
             last_err = e
@@ -84,26 +83,61 @@ def call_gemini(prompt, modelo_escolhido, max_output_tokens=900, timeout_segundo
 
     return {"ok": False, "error": f"Timeout/instabilidade após {max_tentativas} tentativas: {last_err}"}
 
-def gerar_com_reforco(prompt_base, modelo, tokens, tentativas_conteudo=2):
-    """
-    Se vier vazio/cortado demais, tenta novamente com reforço de instrução.
-    """
-    resp = call_gemini(prompt_base, modelo, max_output_tokens=tokens, timeout_segundos=90, max_tentativas=3)
-    if not resp["ok"]:
-        return resp
+def looks_incomplete(text: str, required_markers: list[str]) -> bool:
+    if not text or len(text) < 80:
+        return True
+    for m in required_markers:
+        if m not in text:
+            return True
+    # se termina “no meio” sem quebrar linha, costuma ser corte
+    if len(text) > 0 and text[-1] not in [".", "!", "?", "\n"]:
+        return True
+    return False
 
-    txt = limpar_texto(resp["text"]).strip()
-    if len(txt) < 120 and tentativas_conteudo > 1:
-        # reforço
-        reforco = prompt_base + "\n\nIMPORTANTE: NÃO RESPONDA EM UMA FRASE. ENTREGUE COMPLETO no formato pedido."
-        resp2 = call_gemini(reforco, modelo, max_output_tokens=tokens, timeout_segundos=90, max_tentativas=3)
-        if resp2["ok"]:
-            return {"ok": True, "text": limpar_texto(resp2["text"]).strip()}
-        return resp
-    return {"ok": True, "text": txt}
+def generate_with_continuation(prompt_base, modelo_escolhido, required_markers, max_tokens=900, max_steps=3):
+    """
+    Gera texto e, se cortar/faltar marcador, pede continuação automaticamente.
+    """
+    full = ""
+    debug = []
 
-# ================= PROMPTS (separados por aba para NÃO CORTAR) =================
-def prompt_carrossel(nicho, publico, tema_do_dia):
+    prompt = prompt_base
+    for step in range(1, max_steps + 1):
+        resp = call_gemini(prompt, modelo_escolhido, max_output_tokens=max_tokens, timeout_segundos=120, max_tentativas=3)
+        if not resp["ok"]:
+            return {"ok": False, "error": resp["error"], "text": full, "debug": "\n".join(debug)}
+
+        piece = resp["text"].strip()
+        finish = resp.get("finish_reason", "")
+        debug.append(f"[step {step}] finish_reason={finish}\n{piece}\n")
+
+        # concatena com cuidado pra não colar linhas
+        if full:
+            if not full.endswith("\n"):
+                full += "\n"
+            full += piece
+        else:
+            full = piece
+
+        # valida completude
+        incomplete = looks_incomplete(full, required_markers)
+        if not incomplete and finish != "MAX_TOKENS":
+            return {"ok": True, "text": full.strip(), "debug": "\n".join(debug)}
+
+        # prepara continuação
+        prompt = (
+            "CONTINUE exatamente de onde parou.\n"
+            "NÃO repita nada.\n"
+            "Mantenha o mesmo formato e complete os campos restantes até o fim.\n\n"
+            "CONTEÚDO ATUAL (não repita, apenas continue):\n"
+            f"{full}\n"
+        )
+
+    # se chegou aqui, devolve o que conseguiu
+    return {"ok": True, "text": full.strip(), "debug": "\n".join(debug)}
+
+# ================= PROMPTS (CARROSSEL EM 2 PARTES) =================
+def prompt_carrossel_p1(nicho, publico, tema_do_dia):
     return f"""
 Você é um copywriter sênior de Instagram para nutricionistas.
 Crie 1 CARROSSEL PRONTO para postar HOJE.
@@ -116,9 +150,8 @@ Dados:
 Regras:
 - Português (Brasil).
 - Texto curto e postável (até ~120 caracteres por slide).
-- 7 slides.
-- NÃO dê ideias vagas: escreva o texto exato.
-- Entregue no formato abaixo, sem texto fora:
+- Não faça ideias vagas: escreva o texto exato.
+- Entregue SOMENTE no formato abaixo:
 
 TEMA:
 CAPA:
@@ -126,13 +159,25 @@ SLIDE 1:
 SLIDE 2:
 SLIDE 3:
 SLIDE 4:
-SLIDE 5:
-SLIDE 6:
-SLIDE 7 (CTA leve):
 IMAGEM SLIDE 1:
 IMAGEM SLIDE 2:
 IMAGEM SLIDE 3:
 IMAGEM SLIDE 4:
+"""
+
+def prompt_carrossel_p2(nicho, publico, tema_do_dia, contexto_p1):
+    return f"""
+Você está continuando o mesmo carrossel.
+NÃO repita TEMA, CAPA, SLIDES 1-4 ou IMAGENS 1-4.
+Apenas complete a PARTE 2 no formato abaixo.
+
+Contexto já feito (não repetir):
+{contexto_p1}
+
+FORMATO (SOMENTE ISSO):
+SLIDE 5:
+SLIDE 6:
+SLIDE 7 (CTA leve):
 IMAGEM SLIDE 5:
 IMAGEM SLIDE 6:
 IMAGEM SLIDE 7:
@@ -141,7 +186,7 @@ IMAGEM SLIDE 7:
 def prompt_legenda(nicho, publico, tema_do_dia):
     return f"""
 Você é um copywriter sênior.
-Crie uma LEGENDA PRONTA para o carrossel de hoje (com CTA leve).
+Crie uma LEGENDA PRONTA para o carrossel de hoje (CTA leve).
 
 Dados:
 - Nicho: {nicho}
@@ -150,9 +195,8 @@ Dados:
 
 Regras:
 - Até ~700 caracteres.
-- Sem promessas milagrosas.
-- Inclua 10 hashtags no final (em uma linha).
-- Entregue no formato abaixo, sem texto fora:
+- Inclua 10 hashtags no final (uma linha).
+- Entregue SOMENTE no formato abaixo:
 
 LEGENDA:
 HASHTAGS (10): #... #... #... #... #... #... #... #... #... #...
@@ -160,43 +204,48 @@ HASHTAGS (10): #... #... #... #... #... #... #... #... #... #...
 
 def prompt_reels_ideias(nicho, publico):
     return f"""
-Você é estrategista de conteúdo para Instagram.
-Crie 2 IDEIAS de REELS para nutricionista (rápido, simples de executar).
+Você é estrategista de conteúdo.
+Crie 2 IDEIAS de REELS para nutricionista (simples, executável).
 
 Dados:
 - Nicho: {nicho}
 - Público: {publico}
 
-Regras:
-- Não escreva roteiro completo.
-- Entregue no formato abaixo, sem texto fora:
+Entregue SOMENTE no formato abaixo:
 
 REELS 1 — Tema:
 Hook:
 O que mostrar (2 bullets):
+- ...
+- ...
 O que falar (3 bullets):
+- ...
+- ...
+- ...
 Duração (sugestão):
 
 REELS 2 — Tema:
 Hook:
 O que mostrar (2 bullets):
+- ...
+- ...
 O que falar (3 bullets):
+- ...
+- ...
+- ...
 Duração (sugestão):
 """
 
 def prompt_stories_ideias(nicho, publico):
     return f"""
-Você é estrategista de conteúdo para Instagram.
-Crie 1 sequência de STORIES (3 telas) para nutricionista, só IDEIAS (curto).
+Você é estrategista de conteúdo.
+Crie 1 sequência de STORIES (3 telas) para nutricionista.
 
 Dados:
 - Nicho: {nicho}
 - Público: {publico}
 
-Regras:
-- 3 stories curtos.
-- Cada story com: texto + sticker sugerido.
-- Entregue no formato abaixo, sem texto fora:
+Entregue SOMENTE no formato abaixo:
 
 STORY 1 (texto):
 Sticker:
@@ -234,77 +283,110 @@ if "rodada" not in st.session_state:
     st.session_state.rodada = str(uuid.uuid4())
 
 # outputs
-for key in ["out_carrossel", "out_legenda", "out_reels", "out_stories", "raw_log"]:
-    if key not in st.session_state:
-        st.session_state[key] = ""
+for k in ["out_carrossel", "out_legenda", "out_reels", "out_stories", "raw_debug"]:
+    if k not in st.session_state:
+        st.session_state[k] = ""
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.markdown("### 🎯 Gerar conteúdo")
+    st.markdown("### 🎯 Gerar conteúdo de hoje")
     with st.form("form_principal"):
         nicho = st.text_input("Nicho", "Emagrecimento")
         publico = st.text_input("Público", "Mulheres 25–40 com ansiedade e compulsão")
         tema_do_dia = st.text_input("Tema do dia (opcional)", "")
-        gerar = st.form_submit_button("GERAR CONTEÚDO DE HOJE")
+        gerar = st.form_submit_button("GERAR")
 
-    st.markdown("---")
-    st.caption("Dica: quanto mais específico o público, mais “profissional” e menos genérico fica.")
+    st.caption("Quanto mais específico o público, mais profissional e menos genérico fica.")
 
 if gerar:
-    st.session_state.raw_log = ""
+    st.session_state.raw_debug = ""
 
-    with st.spinner("Gerando Carrossel..."):
-        r1 = gerar_com_reforco(prompt_carrossel(nicho, publico, tema_do_dia), modelo, tokens=950)
-        if r1["ok"]:
-            st.session_state.out_carrossel = r1["text"]
-            st.session_state.raw_log += "\n\n===CARROSSEL===\n" + r1["text"]
-        else:
-            st.session_state.out_carrossel = "ERRO: " + r1["error"]
+    # ===== CARROSSEL (2 PARTES + continuação) =====
+    with st.spinner("Gerando carrossel (parte 1)..."):
+        p1 = generate_with_continuation(
+            prompt_carrossel_p1(nicho, publico, tema_do_dia),
+            modelo,
+            required_markers=["TEMA:", "CAPA:", "SLIDE 1:", "SLIDE 4:", "IMAGEM SLIDE 4:"],
+            max_tokens=800,
+            max_steps=3
+        )
 
-    with st.spinner("Gerando Legenda..."):
-        r2 = gerar_com_reforco(prompt_legenda(nicho, publico, tema_do_dia), modelo, tokens=650)
-        if r2["ok"]:
-            st.session_state.out_legenda = r2["text"]
-            st.session_state.raw_log += "\n\n===LEGENDA===\n" + r2["text"]
-        else:
-            st.session_state.out_legenda = "ERRO: " + r2["error"]
+    if not p1["ok"]:
+        st.session_state.out_carrossel = "ERRO: " + p1["error"]
+        st.session_state.raw_debug += "\n\n===CARROSSEL P1 ERRO===\n" + p1["error"]
+    else:
+        with st.spinner("Gerando carrossel (parte 2)..."):
+            p2 = generate_with_continuation(
+                prompt_carrossel_p2(nicho, publico, tema_do_dia, p1["text"]),
+                modelo,
+                required_markers=["SLIDE 5:", "SLIDE 7", "IMAGEM SLIDE 7:"],
+                max_tokens=700,
+                max_steps=3
+            )
 
+        carrossel_final = p1["text"].strip() + "\n\n" + (p2["text"].strip() if p2["ok"] else "")
+        st.session_state.out_carrossel = carrossel_final.strip()
+
+        st.session_state.raw_debug += "\n\n===CARROSSEL P1===\n" + p1.get("debug", "")
+        st.session_state.raw_debug += "\n\n===CARROSSEL P2===\n" + (p2.get("debug", "") if isinstance(p2, dict) else "")
+
+    # ===== LEGENDA =====
+    with st.spinner("Gerando legenda..."):
+        leg = generate_with_continuation(
+            prompt_legenda(nicho, publico, tema_do_dia),
+            modelo,
+            required_markers=["LEGENDA:", "HASHTAGS (10):"],
+            max_tokens=650,
+            max_steps=3
+        )
+        st.session_state.out_legenda = leg["text"] if leg["ok"] else ("ERRO: " + leg["error"])
+        st.session_state.raw_debug += "\n\n===LEGENDA===\n" + leg.get("debug", "")
+
+    # ===== REELS =====
     with st.spinner("Gerando ideias de Reels..."):
-        r3 = gerar_com_reforco(prompt_reels_ideias(nicho, publico), modelo, tokens=650)
-        if r3["ok"]:
-            st.session_state.out_reels = r3["text"]
-            st.session_state.raw_log += "\n\n===REELS===\n" + r3["text"]
-        else:
-            st.session_state.out_reels = "ERRO: " + r3["error"]
+        reels = generate_with_continuation(
+            prompt_reels_ideias(nicho, publico),
+            modelo,
+            required_markers=["REELS 1", "REELS 2", "Duração"],
+            max_tokens=750,
+            max_steps=3
+        )
+        st.session_state.out_reels = reels["text"] if reels["ok"] else ("ERRO: " + reels["error"])
+        st.session_state.raw_debug += "\n\n===REELS===\n" + reels.get("debug", "")
 
+    # ===== STORIES =====
     with st.spinner("Gerando ideias de Stories..."):
-        r4 = gerar_com_reforco(prompt_stories_ideias(nicho, publico), modelo, tokens=500)
-        if r4["ok"]:
-            st.session_state.out_stories = r4["text"]
-            st.session_state.raw_log += "\n\n===STORIES===\n" + r4["text"]
-        else:
-            st.session_state.out_stories = "ERRO: " + r4["error"]
+        stories = generate_with_continuation(
+            prompt_stories_ideias(nicho, publico),
+            modelo,
+            required_markers=["STORY 1", "STORY 2", "STORY 3", "CTA final"],
+            max_tokens=550,
+            max_steps=3
+        )
+        st.session_state.out_stories = stories["text"] if stories["ok"] else ("ERRO: " + stories["error"])
+        st.session_state.raw_debug += "\n\n===STORIES===\n" + stories.get("debug", "")
 
     st.session_state.rodada = str(uuid.uuid4())
     st.rerun()
 
 with col2:
     rodada = st.session_state.rodada
-    abas = st.tabs(["🖼️ Carrossel pronto", "✍️ Legenda + hashtags", "🎬 Reels (ideias)", "📲 Stories (ideias)"] + (["🔎 Debug"] if debug_mode else []))
+    tabs = ["🖼️ Carrossel pronto", "✍️ Legenda + hashtags", "🎬 Reels (ideias)", "📲 Stories (ideias)"]
+    if debug_mode:
+        tabs.append("🔎 Debug")
+
+    abas = st.tabs(tabs)
 
     with abas[0]:
         st.text_area("Copiar e colar:", value=st.session_state.out_carrossel, height=650, key=f"car_{rodada}")
-
     with abas[1]:
         st.text_area("Copiar e colar:", value=st.session_state.out_legenda, height=650, key=f"leg_{rodada}")
-
     with abas[2]:
         st.text_area("Copiar e colar:", value=st.session_state.out_reels, height=650, key=f"reels_{rodada}")
-
     with abas[3]:
         st.text_area("Copiar e colar:", value=st.session_state.out_stories, height=650, key=f"stories_{rodada}")
 
     if debug_mode:
         with abas[4]:
-            st.text_area("RAW LOG", value=st.session_state.raw_log, height=650, key=f"raw_{rodada}")
+            st.text_area("RAW DEBUG (passo a passo do que o modelo devolveu)", value=st.session_state.raw_debug, height=650, key=f"dbg_{rodada}")
